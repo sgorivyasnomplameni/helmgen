@@ -42,3 +42,12 @@ class ChartValidationResponse(BaseModel):
     checks: list[str]
     engine: str = "builtin"
     summary: str = ""
+
+
+class ChartTemplateResponse(BaseModel):
+    success: bool
+    rendered_manifests: str
+    errors: list[str]
+    warnings: list[str]
+    engine: str = "helm_template"
+    summary: str = ""

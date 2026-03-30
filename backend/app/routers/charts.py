@@ -13,9 +13,11 @@ from app.schemas.chart import (
     ChartCreate,
     ChartGenerateRequest,
     ChartResponse,
+    ChartTemplateResponse,
     ChartUpdate,
     ChartValidationResponse,
 )
+from app.services.chart_renderer import render_chart_template
 from app.services.chart_validator import validate_chart
 from app.services.helm_generator import build_chart_archive, generate_chart
 from app.services.recommender import ChartParams, RecommendationSystem
@@ -99,6 +101,15 @@ async def validate(chart_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Chart not found")
 
     return validate_chart(chart)
+
+
+@router.post("/{chart_id}/template", response_model=ChartTemplateResponse)
+async def template_chart(chart_id: int, db: AsyncSession = Depends(get_db)):
+    chart = await db.get(Chart, chart_id)
+    if not chart:
+        raise HTTPException(status_code=404, detail="Chart not found")
+
+    return render_chart_template(chart)
 
 
 @router.get("/{chart_id}/download")

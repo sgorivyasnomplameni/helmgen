@@ -4,7 +4,11 @@ import WorkloadCard from '@/components/WorkloadCard'
 import ToggleSwitch from '@/components/ToggleSwitch'
 import YamlPreview from '@/components/YamlPreview'
 import RecommendationsBlock from '@/components/RecommendationsBlock'
-import { chartsApi, type ChartValidationResult } from '@/api/charts'
+import {
+  chartsApi,
+  type ChartTemplateResult,
+  type ChartValidationResult,
+} from '@/api/charts'
 import { generateValuesYaml } from '@/utils/yamlGenerator'
 
 const DEFAULT_CONFIG: ChartConfig = {
@@ -224,11 +228,14 @@ export default function GeneratorPage() {
   const [generatedChartId, setGeneratedChartId] = useState<number | null>(null)
   const [validation, setValidation] = useState<ChartValidationResult | null>(null)
   const [isValidating, setIsValidating] = useState(false)
+  const [templateResult, setTemplateResult] = useState<ChartTemplateResult | null>(null)
+  const [isTemplating, setIsTemplating] = useState(false)
 
   function resetGenerationState() {
     setStatus('idle')
     setGeneratedChartId(null)
     setValidation(null)
+    setTemplateResult(null)
   }
 
   function set<K extends keyof ChartConfig>(key: K, value: ChartConfig[K]) {
@@ -288,6 +295,7 @@ export default function GeneratorPage() {
     }
     setStatus('loading')
     setValidation(null)
+    setTemplateResult(null)
     try {
       const payload = {
         name: config.appName,
@@ -325,6 +333,26 @@ export default function GeneratorPage() {
       })
     } finally {
       setIsValidating(false)
+    }
+  }
+
+  async function handleTemplate() {
+    if (!generatedChartId) return
+    setIsTemplating(true)
+    try {
+      const result = await chartsApi.template(generatedChartId)
+      setTemplateResult(result)
+    } catch {
+      setTemplateResult({
+        success: false,
+        rendered_manifests: '',
+        errors: ['Не удалось выполнить рендер манифестов'],
+        warnings: [],
+        engine: 'helm_template',
+        summary: 'Рендер завершился с ошибкой запроса',
+      })
+    } finally {
+      setIsTemplating(false)
     }
   }
 
@@ -675,7 +703,7 @@ export default function GeneratorPage() {
         <RecommendationsBlock config={config} />
 
         <div style={{ ...card, padding: '1.1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
             <button
               type="button"
               onClick={handleGenerate}
@@ -704,6 +732,21 @@ export default function GeneratorPage() {
               }}
             >
               {isValidating ? 'Проверка...' : 'Проверить chart'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleTemplate()}
+              disabled={!generatedChartId || isTemplating || status === 'loading'}
+              style={{
+                ...primaryButton,
+                background: templateResult?.success ? '#0f766e' : '#0ea5e9',
+                color: 'white',
+                cursor: !generatedChartId || isTemplating || status === 'loading' ? 'not-allowed' : 'pointer',
+                opacity: !generatedChartId || isTemplating || status === 'loading' ? 0.55 : 1,
+              }}
+            >
+              {isTemplating ? 'Рендер...' : 'Рендер манифестов'}
             </button>
 
             <button
@@ -811,6 +854,109 @@ export default function GeneratorPage() {
                   <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
                 ))}
               </ul>
+            </div>
+          </div>
+        )}
+
+        {templateResult && (
+          <div
+            style={{
+              ...card,
+              border: `1px solid ${templateResult.success ? '#bfdbfe' : '#fecaca'}`,
+              background: templateResult.success ? '#eff6ff' : '#fff7ed',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
+              <div>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                  Helm Template
+                </div>
+                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
+                  {templateResult.summary || 'Итоговые Kubernetes-манифесты после рендера Helm chart'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: '#dbeafe',
+                    color: '#1d4ed8',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {templateResult.engine.replace('_', ' ')}
+                </span>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: templateResult.success ? '#dcfce7' : '#fee2e2',
+                    color: templateResult.success ? '#166534' : '#b91c1c',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                  }}
+                >
+                  {templateResult.success ? 'RENDERED' : 'FAILED'}
+                </span>
+              </div>
+            </div>
+
+            {templateResult.errors.length > 0 && (
+              <div style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Ошибки рендера
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
+                  {templateResult.errors.map(item => (
+                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {templateResult.warnings.length > 0 && (
+              <div style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Предупреждения
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
+                  {templateResult.warnings.map(item => (
+                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#1d4ed8', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Результат helm template
+              </div>
+              <div
+                style={{
+                  background: '#0f172a',
+                  borderRadius: '0.85rem',
+                  padding: '1rem',
+                  maxHeight: '420px',
+                  overflow: 'auto',
+                }}
+              >
+                <pre
+                  style={{
+                    margin: 0,
+                    color: '#dbeafe',
+                    fontSize: '0.78rem',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                  }}
+                >
+                  {templateResult.rendered_manifests || '# Helm template не вернул манифесты'}
+                </pre>
+              </div>
             </div>
           </div>
         )}

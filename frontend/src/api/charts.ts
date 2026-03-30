@@ -22,6 +22,15 @@ export interface ChartValidationResult {
   summary: string
 }
 
+export interface ChartTemplateResult {
+  success: boolean
+  rendered_manifests: string
+  errors: string[]
+  warnings: string[]
+  engine: string
+  summary: string
+}
+
 export const chartsApi = {
   list: () => api.get<Chart[]>('/charts/').then(r => r.data),
 
@@ -40,6 +49,9 @@ export const chartsApi = {
 
   validate: (id: number) =>
     api.post<ChartValidationResult>(`/charts/${id}/validate`).then(r => r.data),
+
+  template: (id: number) =>
+    api.post<ChartTemplateResult>(`/charts/${id}/template`).then(r => r.data),
 
   recommendations: (params: RecommendationParams) =>
     api.get<string[]>('/charts/recommendations', { params }).then(r => r.data),
