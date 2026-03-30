@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from app.services import chart_renderer
-from app.services.chart_renderer import render_chart_template
+from app.services.chart_renderer import dry_run_deploy_chart, render_chart_template
 from app.services.helm_generator import generate_chart
 
 
@@ -105,3 +105,52 @@ def test_template_returns_helm_errors(monkeypatch) -> None:
 
     assert result.success is False
     assert any("invalid" in item for item in result.errors)
+
+
+def test_dry_run_reports_missing_helm(monkeypatch) -> None:
+    chart = _build_chart()
+    monkeypatch.setattr(chart_renderer, "_resolve_helm_binary", lambda: None)
+
+    result = dry_run_deploy_chart(chart)
+
+    assert result.success is False
+    assert any("Helm CLI" in item for item in result.errors)
+
+
+def test_dry_run_returns_output(monkeypatch) -> None:
+    chart = _build_chart()
+    monkeypatch.setattr(chart_renderer, "_resolve_helm_binary", lambda: "/usr/bin/helm")
+    monkeypatch.setattr(
+        chart_renderer.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="Release \"demo-release\" has been upgraded. Happy Helming!",
+            stderr="client-side dry run",
+        ),
+    )
+
+    result = dry_run_deploy_chart(chart)
+
+    assert result.success is True
+    assert result.engine == "helm_dry_run"
+    assert "Happy Helming" in result.output
+
+
+def test_dry_run_returns_helm_errors(monkeypatch) -> None:
+    chart = _build_chart()
+    monkeypatch.setattr(chart_renderer, "_resolve_helm_binary", lambda: "/usr/bin/helm")
+    monkeypatch.setattr(
+        chart_renderer.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="Error: release failed due to invalid values",
+        ),
+    )
+
+    result = dry_run_deploy_chart(chart)
+
+    assert result.success is False
+    assert any("invalid values" in item for item in result.errors)

@@ -34,7 +34,11 @@ function formatDate(value: string): string {
   })
 }
 
-export default function HistoryPage() {
+interface Props {
+  active?: boolean
+}
+
+export default function HistoryPage({ active = true }: Props) {
   const [charts, setCharts] = useState<Chart[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -54,8 +58,10 @@ export default function HistoryPage() {
   }
 
   useEffect(() => {
-    void loadCharts()
-  }, [])
+    if (active) {
+      void loadCharts()
+    }
+  }, [active])
 
   async function handleDelete(chartId: number) {
     setDeletingId(chartId)

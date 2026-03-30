@@ -31,6 +31,15 @@ export interface ChartTemplateResult {
   summary: string
 }
 
+export interface ChartDryRunResult {
+  success: boolean
+  output: string
+  errors: string[]
+  warnings: string[]
+  engine: string
+  summary: string
+}
+
 export const chartsApi = {
   list: () => api.get<Chart[]>('/charts/').then(r => r.data),
 
@@ -52,6 +61,9 @@ export const chartsApi = {
 
   template: (id: number) =>
     api.post<ChartTemplateResult>(`/charts/${id}/template`).then(r => r.data),
+
+  dryRunDeploy: (id: number) =>
+    api.post<ChartDryRunResult>(`/charts/${id}/deploy/dry-run`).then(r => r.data),
 
   recommendations: (params: RecommendationParams) =>
     api.get<string[]>('/charts/recommendations', { params }).then(r => r.data),

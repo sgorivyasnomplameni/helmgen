@@ -51,3 +51,12 @@ class ChartTemplateResponse(BaseModel):
     warnings: list[str]
     engine: str = "helm_template"
     summary: str = ""
+
+
+class ChartDryRunResponse(BaseModel):
+    success: bool
+    output: str
+    errors: list[str]
+    warnings: list[str]
+    engine: str = "helm_dry_run"
+    summary: str = ""

@@ -11,13 +11,14 @@ from app.database import get_db
 from app.models.chart import Chart
 from app.schemas.chart import (
     ChartCreate,
+    ChartDryRunResponse,
     ChartGenerateRequest,
     ChartResponse,
     ChartTemplateResponse,
     ChartUpdate,
     ChartValidationResponse,
 )
-from app.services.chart_renderer import render_chart_template
+from app.services.chart_renderer import dry_run_deploy_chart, render_chart_template
 from app.services.chart_validator import validate_chart
 from app.services.helm_generator import build_chart_archive, generate_chart
 from app.services.recommender import ChartParams, RecommendationSystem
@@ -110,6 +111,15 @@ async def template_chart(chart_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Chart not found")
 
     return render_chart_template(chart)
+
+
+@router.post("/{chart_id}/deploy/dry-run", response_model=ChartDryRunResponse)
+async def dry_run_deploy(chart_id: int, db: AsyncSession = Depends(get_db)):
+    chart = await db.get(Chart, chart_id)
+    if not chart:
+        raise HTTPException(status_code=404, detail="Chart not found")
+
+    return dry_run_deploy_chart(chart)
 
 
 @router.get("/{chart_id}/download")

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ChartConfig, WorkloadType, ServiceType } from '@/types/generator'
 import WorkloadCard from '@/components/WorkloadCard'
 import ToggleSwitch from '@/components/ToggleSwitch'
@@ -6,6 +6,7 @@ import YamlPreview from '@/components/YamlPreview'
 import RecommendationsBlock from '@/components/RecommendationsBlock'
 import {
   chartsApi,
+  type ChartDryRunResult,
   type ChartTemplateResult,
   type ChartValidationResult,
 } from '@/api/charts'
@@ -205,6 +206,25 @@ const primaryButton: React.CSSProperties = {
   transition: 'all 0.2s',
 }
 
+const stepChipBase: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.45rem',
+  padding: '0.45rem 0.7rem',
+  borderRadius: '999px',
+  fontSize: '0.76rem',
+  fontWeight: 700,
+}
+
+function summarizeDryRunError(errors: string[]): string | null {
+  const clusterError = errors.find(error => error.includes('Kubernetes cluster unreachable'))
+  if (clusterError) {
+    return 'Kubernetes-кластер сейчас недоступен. Dry-run deploy требует активного kube-context.'
+  }
+
+  return errors[0] ?? null
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -230,12 +250,36 @@ export default function GeneratorPage() {
   const [isValidating, setIsValidating] = useState(false)
   const [templateResult, setTemplateResult] = useState<ChartTemplateResult | null>(null)
   const [isTemplating, setIsTemplating] = useState(false)
+  const [dryRunResult, setDryRunResult] = useState<ChartDryRunResult | null>(null)
+  const [isDryRunning, setIsDryRunning] = useState(false)
+  const validationRef = useRef<HTMLDivElement | null>(null)
+  const templateRef = useRef<HTMLDivElement | null>(null)
+  const dryRunRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (validation) {
+      validationRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [validation])
+
+  useEffect(() => {
+    if (templateResult) {
+      templateRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [templateResult])
+
+  useEffect(() => {
+    if (dryRunResult) {
+      dryRunRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [dryRunResult])
 
   function resetGenerationState() {
     setStatus('idle')
     setGeneratedChartId(null)
     setValidation(null)
     setTemplateResult(null)
+    setDryRunResult(null)
   }
 
   function set<K extends keyof ChartConfig>(key: K, value: ChartConfig[K]) {
@@ -296,6 +340,7 @@ export default function GeneratorPage() {
     setStatus('loading')
     setValidation(null)
     setTemplateResult(null)
+    setDryRunResult(null)
     try {
       const payload = {
         name: config.appName,
@@ -356,6 +401,26 @@ export default function GeneratorPage() {
     }
   }
 
+  async function handleDryRunDeploy() {
+    if (!generatedChartId) return
+    setIsDryRunning(true)
+    try {
+      const result = await chartsApi.dryRunDeploy(generatedChartId)
+      setDryRunResult(result)
+    } catch {
+      setDryRunResult({
+        success: false,
+        output: '',
+        errors: ['Не удалось выполнить dry-run deploy'],
+        warnings: [],
+        engine: 'helm_dry_run',
+        summary: 'Dry-run deploy завершился с ошибкой запроса',
+      })
+    } finally {
+      setIsDryRunning(false)
+    }
+  }
+
   return (
     <div
       style={{
@@ -379,6 +444,150 @@ export default function GeneratorPage() {
           <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: '#64748b' }}>
             Настройте параметры и получите готовый Helm-чарт
           </p>
+        </div>
+
+        <div
+          style={{
+            ...card,
+            position: 'sticky',
+            top: '5.75rem',
+            zIndex: 10,
+            boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+            border: '1px solid #dbeafe',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                Рабочий пайплайн
+              </div>
+              <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
+                Состояние сохраняется при переходе в историю. После каждого шага экран автоматически прокрутится к новому результату.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <span
+                style={{
+                  ...stepChipBase,
+                  background: generatedChartId ? '#dbeafe' : '#e2e8f0',
+                  color: generatedChartId ? '#1d4ed8' : '#64748b',
+                }}
+              >
+                1. Generate
+              </span>
+              <span
+                style={{
+                  ...stepChipBase,
+                  background: validation?.valid ? '#dcfce7' : validation ? '#fee2e2' : '#e2e8f0',
+                  color: validation?.valid ? '#166534' : validation ? '#b91c1c' : '#64748b',
+                }}
+              >
+                2. Lint
+              </span>
+              <span
+                style={{
+                  ...stepChipBase,
+                  background: templateResult?.success ? '#dbeafe' : templateResult ? '#fee2e2' : '#e2e8f0',
+                  color: templateResult?.success ? '#1d4ed8' : templateResult ? '#b91c1c' : '#64748b',
+                }}
+              >
+                3. Template
+              </span>
+              <span
+                style={{
+                  ...stepChipBase,
+                  background: dryRunResult?.success ? '#ede9fe' : dryRunResult ? '#fee2e2' : '#e2e8f0',
+                  color: dryRunResult?.success ? '#6d28d9' : dryRunResult ? '#b91c1c' : '#64748b',
+                }}
+              >
+                4. Dry-Run
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={status === 'loading'}
+              style={{
+                ...primaryButton,
+                background: status === 'error' ? '#dc2626' : '#2563eb',
+                color: 'white',
+                cursor: status === 'loading' ? 'not-allowed' : 'pointer',
+                opacity: status === 'loading' ? 0.75 : 1,
+              }}
+            >
+              {status === 'loading' ? 'Генерация...' : 'Сгенерировать'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleValidate()}
+              disabled={!generatedChartId || isValidating || status === 'loading'}
+              style={{
+                ...primaryButton,
+                background: validation?.valid ? '#16a34a' : '#f59e0b',
+                color: 'white',
+                cursor: !generatedChartId || isValidating || status === 'loading' ? 'not-allowed' : 'pointer',
+                opacity: !generatedChartId || isValidating || status === 'loading' ? 0.55 : 1,
+              }}
+            >
+              {isValidating ? 'Проверка...' : 'Проверить chart'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleTemplate()}
+              disabled={!generatedChartId || isTemplating || status === 'loading'}
+              style={{
+                ...primaryButton,
+                background: templateResult?.success ? '#0f766e' : '#0ea5e9',
+                color: 'white',
+                cursor: !generatedChartId || isTemplating || status === 'loading' ? 'not-allowed' : 'pointer',
+                opacity: !generatedChartId || isTemplating || status === 'loading' ? 0.55 : 1,
+              }}
+            >
+              {isTemplating ? 'Рендер...' : 'Рендер манифестов'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleDryRunDeploy()}
+              disabled={!generatedChartId || isDryRunning || status === 'loading'}
+              style={{
+                ...primaryButton,
+                background: dryRunResult?.success ? '#7c3aed' : '#8b5cf6',
+                color: 'white',
+                cursor: !generatedChartId || isDryRunning || status === 'loading' ? 'not-allowed' : 'pointer',
+                opacity: !generatedChartId || isDryRunning || status === 'loading' ? 0.55 : 1,
+              }}
+            >
+              {isDryRunning ? 'Dry-run...' : 'Dry-run deploy'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={!generatedChartId}
+              style={{
+                ...primaryButton,
+                background: '#16a34a',
+                color: 'white',
+                cursor: !generatedChartId ? 'not-allowed' : 'pointer',
+                opacity: !generatedChartId ? 0.55 : 1,
+              }}
+            >
+              Скачать архив
+            </button>
+          </div>
+
+          <div style={{ marginTop: '0.85rem', fontSize: '0.84rem', color: '#64748b' }}>
+            {status === 'success' && 'Чарт успешно сгенерирован. Дальше можно последовательно пройти lint, template и dry-run deploy.'}
+            {status === 'loading' && 'Идёт генерация Helm-чарта...'}
+            {status === 'error' && 'Во время генерации возникла ошибка. Попробуйте снова.'}
+            {status === 'idle' && 'Сначала сгенерируйте чарт, затем пройдите шаги проверки и подготовки к развёртыванию.'}
+          </div>
         </div>
 
         <div
@@ -478,6 +687,335 @@ export default function GeneratorPage() {
             })}
           </div>
         </div>
+
+        {/* ── Recommendations ── */}
+        <RecommendationsBlock config={config} />
+
+        {validation && (
+          <div
+            ref={validationRef}
+            style={{
+              ...card,
+              border: `1px solid ${validation.valid ? '#bbf7d0' : '#fecaca'}`,
+              background: validation.valid ? '#f0fdf4' : '#fff7ed',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
+              <div>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                  Результат проверки
+                </div>
+                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
+                  {validation.summary || 'Проверка структуры и параметров Helm-чарта'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: '#e2e8f0',
+                    color: '#334155',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {validation.engine === 'helm_lint' ? 'helm lint' : 'builtin'}
+                </span>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: validation.valid ? '#dcfce7' : '#fee2e2',
+                    color: validation.valid ? '#166534' : '#b91c1c',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                  }}
+                >
+                  {validation.valid ? 'VALID' : 'INVALID'}
+                </span>
+              </div>
+            </div>
+
+            {validation.errors.length > 0 && (
+              <div style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Ошибки
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
+                  {validation.errors.map(item => (
+                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {validation.warnings.length > 0 && (
+              <div style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Предупреждения
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
+                  {validation.warnings.map(item => (
+                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#166534', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Успешные проверки
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#166534' }}>
+                {validation.checks.map(item => (
+                  <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {templateResult && (
+          <div
+            ref={templateRef}
+            style={{
+              ...card,
+              border: `1px solid ${templateResult.success ? '#bfdbfe' : '#fecaca'}`,
+              background: templateResult.success ? '#eff6ff' : '#fff7ed',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
+              <div>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                  Helm Template
+                </div>
+                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
+                  {templateResult.summary || 'Итоговые Kubernetes-манифесты после рендера Helm chart'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: '#dbeafe',
+                    color: '#1d4ed8',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {templateResult.engine.replace('_', ' ')}
+                </span>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: templateResult.success ? '#dcfce7' : '#fee2e2',
+                    color: templateResult.success ? '#166534' : '#b91c1c',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                  }}
+                >
+                  {templateResult.success ? 'RENDERED' : 'FAILED'}
+                </span>
+              </div>
+            </div>
+
+            {templateResult.errors.length > 0 && (
+              <div style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Ошибки рендера
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
+                  {templateResult.errors.map(item => (
+                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {templateResult.warnings.length > 0 && (
+              <div style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Предупреждения
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
+                  {templateResult.warnings.map(item => (
+                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#1d4ed8', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Результат helm template
+              </div>
+              <div
+                style={{
+                  background: '#0f172a',
+                  borderRadius: '0.85rem',
+                  padding: '1rem',
+                  maxHeight: '420px',
+                  overflow: 'auto',
+                }}
+              >
+                <pre
+                  style={{
+                    margin: 0,
+                    color: '#dbeafe',
+                    fontSize: '0.78rem',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                  }}
+                >
+                  {templateResult.rendered_manifests || '# Helm template не вернул манифесты'}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {dryRunResult && (
+          <div
+            ref={dryRunRef}
+            style={{
+              ...card,
+              border: `1px solid ${dryRunResult.success ? '#ddd6fe' : '#fecaca'}`,
+              background: dryRunResult.success ? '#f5f3ff' : '#fff7ed',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
+              <div>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                  Dry-Run Deploy
+                </div>
+                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
+                  {dryRunResult.summary || 'Проверка сценария развёртывания без применения в кластер'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: '#ede9fe',
+                    color: '#6d28d9',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {dryRunResult.engine.replace('_', ' ')}
+                </span>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: dryRunResult.success ? '#dcfce7' : '#fee2e2',
+                    color: dryRunResult.success ? '#166534' : '#b91c1c',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                  }}
+                >
+                  {dryRunResult.success ? 'READY' : 'FAILED'}
+                </span>
+              </div>
+            </div>
+
+            {summarizeDryRunError(dryRunResult.errors) && (
+              <div
+                style={{
+                  marginBottom: '0.85rem',
+                  padding: '0.85rem 1rem',
+                  borderRadius: '0.8rem',
+                  background: '#fff',
+                  border: '1px solid #fed7aa',
+                  color: '#9a3412',
+                  fontSize: '0.86rem',
+                  lineHeight: 1.55,
+                }}
+              >
+                {summarizeDryRunError(dryRunResult.errors)}
+              </div>
+            )}
+
+            {dryRunResult.warnings.length > 0 && (
+              <div style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Предупреждения
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
+                  {dryRunResult.warnings.map(item => (
+                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <details>
+              <summary
+                style={{
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  color: '#6d28d9',
+                  marginBottom: '0.85rem',
+                }}
+              >
+                Показать технические детали dry-run
+              </summary>
+              <div style={{ marginTop: '0.75rem' }}>
+                {dryRunResult.errors.length > 0 && (
+                  <div style={{ marginBottom: '0.85rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Технические ошибки
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
+                      {dryRunResult.errors.map(item => (
+                        <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#6d28d9', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Вывод dry-run deploy
+                  </div>
+                  <div
+                    style={{
+                      background: '#1e1b4b',
+                      borderRadius: '0.85rem',
+                      padding: '1rem',
+                      maxHeight: '420px',
+                      overflow: 'auto',
+                    }}
+                  >
+                    <pre
+                      style={{
+                        margin: 0,
+                        color: '#e9d5ff',
+                        fontSize: '0.78rem',
+                        lineHeight: 1.6,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                      }}
+                    >
+                      {dryRunResult.output || '# Dry-run deploy не вернул вывод'}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        )}
 
         {/* ── Basic params ── */}
         <div style={card}>
@@ -698,268 +1236,6 @@ export default function GeneratorPage() {
             </div>
           )}
         </div>
-
-        {/* ── Recommendations ── */}
-        <RecommendationsBlock config={config} />
-
-        <div style={{ ...card, padding: '1.1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={status === 'loading'}
-              style={{
-                ...primaryButton,
-                background: status === 'error' ? '#dc2626' : '#2563eb',
-                color: 'white',
-                cursor: status === 'loading' ? 'not-allowed' : 'pointer',
-                opacity: status === 'loading' ? 0.75 : 1,
-              }}
-            >
-              {status === 'loading' ? 'Генерация...' : 'Сгенерировать'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void handleValidate()}
-              disabled={!generatedChartId || isValidating || status === 'loading'}
-              style={{
-                ...primaryButton,
-                background: validation?.valid ? '#16a34a' : '#f59e0b',
-                color: 'white',
-                cursor: !generatedChartId || isValidating || status === 'loading' ? 'not-allowed' : 'pointer',
-                opacity: !generatedChartId || isValidating || status === 'loading' ? 0.55 : 1,
-              }}
-            >
-              {isValidating ? 'Проверка...' : 'Проверить chart'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void handleTemplate()}
-              disabled={!generatedChartId || isTemplating || status === 'loading'}
-              style={{
-                ...primaryButton,
-                background: templateResult?.success ? '#0f766e' : '#0ea5e9',
-                color: 'white',
-                cursor: !generatedChartId || isTemplating || status === 'loading' ? 'not-allowed' : 'pointer',
-                opacity: !generatedChartId || isTemplating || status === 'loading' ? 0.55 : 1,
-              }}
-            >
-              {isTemplating ? 'Рендер...' : 'Рендер манифестов'}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={!generatedChartId}
-              style={{
-                ...primaryButton,
-                background: '#16a34a',
-                color: 'white',
-                cursor: !generatedChartId ? 'not-allowed' : 'pointer',
-                opacity: !generatedChartId ? 0.55 : 1,
-              }}
-            >
-              Скачать архив
-            </button>
-          </div>
-
-          <div style={{ marginTop: '0.85rem', fontSize: '0.84rem', color: '#64748b' }}>
-            {status === 'success' && 'Чарт успешно сгенерирован. Теперь его можно проверить и скачать отдельно.'}
-            {status === 'loading' && 'Идёт генерация Helm-чарта...'}
-            {status === 'error' && 'Во время генерации возникла ошибка. Попробуйте снова.'}
-            {status === 'idle' && 'Сначала сгенерируйте чарт, затем проверьте результат и скачайте архив.'}
-          </div>
-        </div>
-
-        {validation && (
-          <div
-            style={{
-              ...card,
-              border: `1px solid ${validation.valid ? '#bbf7d0' : '#fecaca'}`,
-              background: validation.valid ? '#f0fdf4' : '#fff7ed',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
-              <div>
-                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-                  Результат проверки
-                </div>
-                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
-                  {validation.summary || 'Проверка структуры и параметров Helm-чарта'}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: '#e2e8f0',
-                    color: '#334155',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {validation.engine === 'helm_lint' ? 'helm lint' : 'builtin'}
-                </span>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: validation.valid ? '#dcfce7' : '#fee2e2',
-                    color: validation.valid ? '#166534' : '#b91c1c',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                  }}
-                >
-                  {validation.valid ? 'VALID' : 'INVALID'}
-                </span>
-              </div>
-            </div>
-
-            {validation.errors.length > 0 && (
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Ошибки
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
-                  {validation.errors.map(item => (
-                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {validation.warnings.length > 0 && (
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Предупреждения
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
-                  {validation.warnings.map(item => (
-                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#166534', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Успешные проверки
-              </div>
-              <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#166534' }}>
-                {validation.checks.map(item => (
-                  <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {templateResult && (
-          <div
-            style={{
-              ...card,
-              border: `1px solid ${templateResult.success ? '#bfdbfe' : '#fecaca'}`,
-              background: templateResult.success ? '#eff6ff' : '#fff7ed',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
-              <div>
-                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-                  Helm Template
-                </div>
-                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
-                  {templateResult.summary || 'Итоговые Kubernetes-манифесты после рендера Helm chart'}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: '#dbeafe',
-                    color: '#1d4ed8',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {templateResult.engine.replace('_', ' ')}
-                </span>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: templateResult.success ? '#dcfce7' : '#fee2e2',
-                    color: templateResult.success ? '#166534' : '#b91c1c',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                  }}
-                >
-                  {templateResult.success ? 'RENDERED' : 'FAILED'}
-                </span>
-              </div>
-            </div>
-
-            {templateResult.errors.length > 0 && (
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Ошибки рендера
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
-                  {templateResult.errors.map(item => (
-                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {templateResult.warnings.length > 0 && (
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Предупреждения
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
-                  {templateResult.warnings.map(item => (
-                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#1d4ed8', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Результат helm template
-              </div>
-              <div
-                style={{
-                  background: '#0f172a',
-                  borderRadius: '0.85rem',
-                  padding: '1rem',
-                  maxHeight: '420px',
-                  overflow: 'auto',
-                }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    color: '#dbeafe',
-                    fontSize: '0.78rem',
-                    lineHeight: 1.6,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                  }}
-                >
-                  {templateResult.rendered_manifests || '# Helm template не вернул манифесты'}
-                </pre>
-              </div>
-            </div>
-          </div>
-        )}
 
       </div>
 

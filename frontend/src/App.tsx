@@ -81,7 +81,12 @@ export default function App() {
         </div>
       </header>
 
-      {view === 'generator' ? <GeneratorPage /> : <HistoryPage />}
+      <div style={{ display: view === 'generator' ? 'block' : 'none' }}>
+        <GeneratorPage />
+      </div>
+      <div style={{ display: view === 'history' ? 'block' : 'none' }}>
+        <HistoryPage active={view === 'history'} />
+      </div>
     </div>
   )
 }
