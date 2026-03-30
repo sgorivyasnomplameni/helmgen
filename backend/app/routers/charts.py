@@ -9,7 +9,14 @@ from sqlalchemy import select
 
 from app.database import get_db
 from app.models.chart import Chart
-from app.schemas.chart import ChartCreate, ChartUpdate, ChartResponse, ChartGenerateRequest
+from app.schemas.chart import (
+    ChartCreate,
+    ChartGenerateRequest,
+    ChartResponse,
+    ChartUpdate,
+    ChartValidationResponse,
+)
+from app.services.chart_validator import validate_chart
 from app.services.helm_generator import build_chart_archive, generate_chart
 from app.services.recommender import ChartParams, RecommendationSystem
 
@@ -83,6 +90,15 @@ async def generate(
     await db.flush()
     await db.refresh(chart)
     return chart
+
+
+@router.post("/{chart_id}/validate", response_model=ChartValidationResponse)
+async def validate(chart_id: int, db: AsyncSession = Depends(get_db)):
+    chart = await db.get(Chart, chart_id)
+    if not chart:
+        raise HTTPException(status_code=404, detail="Chart not found")
+
+    return validate_chart(chart)
 
 
 @router.get("/{chart_id}/download")

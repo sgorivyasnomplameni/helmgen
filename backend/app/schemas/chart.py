@@ -33,3 +33,12 @@ class ChartResponse(ChartBase):
 
 class ChartGenerateRequest(BaseModel):
     values_yaml: str | None = None
+
+
+class ChartValidationResponse(BaseModel):
+    valid: bool
+    errors: list[str]
+    warnings: list[str]
+    checks: list[str]
+    engine: str = "builtin"
+    summary: str = ""

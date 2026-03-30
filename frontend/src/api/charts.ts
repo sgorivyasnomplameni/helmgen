@@ -13,6 +13,15 @@ export interface RecommendationParams {
   ingress_enabled: boolean
 }
 
+export interface ChartValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+  checks: string[]
+  engine: string
+  summary: string
+}
+
 export const chartsApi = {
   list: () => api.get<Chart[]>('/charts/').then(r => r.data),
 
@@ -28,6 +37,9 @@ export const chartsApi = {
 
   generate: (id: number, values_yaml?: string) =>
     api.post<Chart>(`/charts/${id}/generate`, { values_yaml }).then(r => r.data),
+
+  validate: (id: number) =>
+    api.post<ChartValidationResult>(`/charts/${id}/validate`).then(r => r.data),
 
   recommendations: (params: RecommendationParams) =>
     api.get<string[]>('/charts/recommendations', { params }).then(r => r.data),

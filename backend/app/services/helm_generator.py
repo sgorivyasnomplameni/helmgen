@@ -16,6 +16,9 @@ appVersion: "{{ app_version }}"
 """
 
 VALUES_YAML_TEMPLATE = """\
+workload:
+  type: Deployment
+
 replicaCount: 1
 
 image:
@@ -24,8 +27,12 @@ image:
   tag: ""
 
 service:
+  enabled: true
   type: ClusterIP
   port: 80
+
+ingress:
+  enabled: false
 
 resources: {}
 """
@@ -34,17 +41,20 @@ _env = Environment(loader=BaseLoader())
 
 # ── Private renderers (all use Python f-string escaping: {{{{ → {{, }}}} → }}) ──
 
-def _render_deployment(name: str) -> str:
+def _render_deployment(name: str, workload_type: str = "Deployment") -> str:
+    replicas_block = ""
+    if workload_type != "DaemonSet":
+        replicas_block = "  replicas: {{ .Values.replicaCount }}\n"
+
     return f"""\
 apiVersion: apps/v1
-kind: Deployment
+kind: {workload_type}
 metadata:
   name: {{{{ include "{name}.fullname" . }}}}
   labels:
     {{{{- include "{name}.labels" . | nindent 4 }}}}
 spec:
-  replicas: {{{{ .Values.replicaCount }}}}
-  selector:
+{replicas_block}  selector:
     matchLabels:
       {{{{- include "{name}.selectorLabels" . | nindent 6 }}}}
   template:
@@ -179,6 +189,62 @@ def _parse_generated_yaml(generated_yaml: str) -> dict[str, str]:
     return sections
 
 
+def _parse_values_yaml(values_yaml: str | None) -> dict:
+    if not values_yaml:
+        return {}
+    root: dict = {}
+    stack: list[tuple[int, dict]] = [(-1, root)]
+
+    for raw_line in values_yaml.splitlines():
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        stripped = raw_line.strip()
+        if ":" not in stripped:
+            continue
+
+        key, _, raw_value = stripped.partition(":")
+        value = raw_value.strip()
+
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+
+        parent = stack[-1][1]
+        if value == "":
+            child: dict = {}
+            parent[key] = child
+            stack.append((indent, child))
+            continue
+
+        if value.startswith('"') and value.endswith('"'):
+            parsed_value = value[1:-1]
+        elif value == "true":
+            parsed_value = True
+        elif value == "false":
+            parsed_value = False
+        else:
+            parsed_value = value
+
+        parent[key] = parsed_value
+
+    return root
+
+
+def _is_feature_enabled(values_data: dict, section_name: str, default: bool) -> bool:
+    section = values_data.get(section_name)
+    if not isinstance(section, dict):
+        return default
+
+    enabled = section.get("enabled")
+    if isinstance(enabled, bool):
+        return enabled
+
+    # Backward compatibility for older values.yaml files that used
+    # the section presence itself as the enable flag.
+    return len(section) > 0 or default
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def generate_chart(chart) -> str:
@@ -191,7 +257,9 @@ def generate_chart(chart) -> str:
     }
     chart_yaml = _env.from_string(CHART_YAML_TEMPLATE).render(**ctx)
     values_yaml = chart.values_yaml or VALUES_YAML_TEMPLATE
-    deployment_yaml = _render_deployment(chart.name)
+    values_data = _parse_values_yaml(values_yaml)
+    workload_type = values_data.get("workload", {}).get("type", "Deployment")
+    deployment_yaml = _render_deployment(chart.name, workload_type)
 
     return "\n---\n".join([
         f"# Chart.yaml\n{chart_yaml}",
@@ -216,13 +284,21 @@ def build_chart_archive(chart) -> bytes:
     name = chart.name or "chart"
     sections = _parse_generated_yaml(chart.generated_yaml or "")
 
-    chart_yaml_content    = sections.get("Chart.yaml", "")
-    values_yaml_content   = sections.get("values.yaml", VALUES_YAML_TEMPLATE)
-    deployment_content    = sections.get("templates/deployment.yaml", _render_deployment(name))
-
-    # Include ingress.yaml when values contain an ingress block
-    combined_values = (chart.values_yaml or "") + values_yaml_content
-    ingress_enabled = "ingress:" in combined_values
+    chart_yaml_content  = sections.get("Chart.yaml", "")
+    # Prefer: bundle section → stored field → default template
+    values_yaml_content = (
+        sections.get("values.yaml")
+        or chart.values_yaml
+        or VALUES_YAML_TEMPLATE
+    )
+    values_data = _parse_values_yaml(values_yaml_content)
+    workload_type = values_data.get("workload", {}).get("type", "Deployment")
+    service_enabled = _is_feature_enabled(values_data, "service", True)
+    ingress_enabled = _is_feature_enabled(values_data, "ingress", False)
+    deployment_content = sections.get(
+        "templates/deployment.yaml",
+        _render_deployment(name, workload_type),
+    )
 
     tmpdir = tempfile.mkdtemp()
     try:
@@ -238,7 +314,8 @@ def build_chart_archive(chart) -> bytes:
         write(os.path.join(chart_dir,     "values.yaml"),          values_yaml_content)
         write(os.path.join(templates_dir, "_helpers.tpl"),         _render_helpers(name))
         write(os.path.join(templates_dir, "deployment.yaml"),      deployment_content)
-        write(os.path.join(templates_dir, "service.yaml"),         _render_service(name))
+        if service_enabled:
+            write(os.path.join(templates_dir, "service.yaml"),     _render_service(name))
         if ingress_enabled:
             write(os.path.join(templates_dir, "ingress.yaml"),     _render_ingress(name))
 

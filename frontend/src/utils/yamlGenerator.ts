@@ -87,6 +87,59 @@ spec:
                   number: {{ .Values.service.port }}`
 }
 
+export function generateValuesYaml(c: ChartConfig): string {
+  const lines: string[] = []
+
+  lines.push('workload:')
+  lines.push(`  type: ${c.workloadType}`)
+  lines.push('')
+  lines.push(`replicaCount: ${c.workloadType === 'DaemonSet' ? 1 : c.replicas}`)
+  lines.push('')
+  lines.push('image:')
+  lines.push(`  repository: ${c.image || 'nginx'}`)
+  lines.push('  pullPolicy: IfNotPresent')
+  lines.push(`  tag: "${c.imageTag || 'latest'}"`)
+  lines.push('')
+  lines.push(`containerPort: ${c.containerPort}`)
+
+  if (c.service.enabled) {
+    lines.push('')
+    lines.push('service:')
+    lines.push('  enabled: true')
+    lines.push(`  type: ${c.service.type}`)
+    lines.push(`  port: ${c.service.port}`)
+  } else {
+    lines.push('')
+    lines.push('service:')
+    lines.push('  enabled: false')
+    lines.push('  type: ClusterIP')
+    lines.push(`  port: ${c.service.port}`)
+  }
+
+  lines.push('')
+  lines.push('ingress:')
+  lines.push(`  enabled: ${c.ingress.enabled ? 'true' : 'false'}`)
+  if (c.ingress.enabled) {
+    lines.push(`  host: "${c.ingress.host}"`)
+    lines.push(`  path: "${c.ingress.path}"`)
+  }
+
+  lines.push('')
+  if (c.resources.enabled) {
+    lines.push('resources:')
+    lines.push('  requests:')
+    lines.push(`    cpu: ${c.resources.requests.cpu}`)
+    lines.push(`    memory: ${c.resources.requests.memory}`)
+    lines.push('  limits:')
+    lines.push(`    cpu: ${c.resources.limits.cpu}`)
+    lines.push(`    memory: ${c.resources.limits.memory}`)
+  } else {
+    lines.push('resources: {}')
+  }
+
+  return lines.join('\n')
+}
+
 export function generateChartYaml(c: ChartConfig): string {
   return `apiVersion: v2
 name: ${name(c)}

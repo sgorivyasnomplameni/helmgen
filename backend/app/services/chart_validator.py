@@ -1,0 +1,199 @@
+from __future__ import annotations
+
+import io
+import os
+import shutil
+import subprocess
+import tarfile
+import tempfile
+
+from pydantic import BaseModel
+
+from app.services.helm_generator import build_chart_archive
+
+
+class ValidationResult(BaseModel):
+    valid: bool
+    errors: list[str]
+    warnings: list[str]
+    checks: list[str]
+    engine: str = "builtin"
+    summary: str = ""
+
+
+def _builtin_validate(chart) -> ValidationResult:
+    if not chart.generated_yaml:
+        return ValidationResult(
+            valid=False,
+            errors=["Сначала необходимо сгенерировать Helm-чарт"],
+            warnings=[],
+            checks=[],
+            engine="builtin",
+            summary="Чарт ещё не был сгенерирован",
+        )
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    checks: list[str] = []
+
+    generated_yaml = chart.generated_yaml or ""
+    values_yaml = chart.values_yaml or ""
+
+    archive = build_chart_archive(chart)
+    checks.append(f"Архив собран успешно: {len(archive)} байт")
+
+    required_sections = [
+        "# Chart.yaml",
+        "# values.yaml",
+        "# templates/deployment.yaml",
+    ]
+    for section in required_sections:
+        if section not in generated_yaml:
+            errors.append(f"В generated bundle отсутствует секция {section[2:]}")
+        else:
+            checks.append(f"Найдена секция {section[2:]}")
+
+    if "kind: DaemonSet" in generated_yaml:
+        if "replicas:" in generated_yaml:
+            errors.append("DaemonSet не должен содержать поле replicas")
+        else:
+            checks.append("DaemonSet корректно сгенерирован без replicas")
+
+    if "service:\n  enabled: false" in values_yaml:
+        if "# Service отключён" not in generated_yaml and "templates/service.yaml" in generated_yaml:
+            warnings.append("Service отключён в values, но шаблон service мог сохраниться в preview")
+        checks.append("Service отключён в values.yaml")
+    elif "service:" in values_yaml:
+        checks.append("Service секция присутствует в values.yaml")
+    else:
+        warnings.append("В values.yaml отсутствует секция service")
+
+    if "ingress:\n  enabled: true" in values_yaml:
+        if 'host: ""' in values_yaml or "host:" not in values_yaml:
+            errors.append("Для включённого ingress должен быть задан host")
+        else:
+            checks.append("Ingress включён и содержит host")
+    elif "ingress:\n  enabled: false" in values_yaml:
+        checks.append("Ingress отключён в values.yaml")
+
+    if 'tag: "latest"' in values_yaml:
+        warnings.append("Тег latest нежелателен для production-сценариев")
+    else:
+        checks.append("Используется фиксированная версия образа")
+
+    if "resources: {}" in values_yaml:
+        warnings.append("Resource limits не заданы")
+    else:
+        checks.append("Resource limits заданы")
+
+    return ValidationResult(
+        valid=not errors,
+        errors=errors,
+        warnings=warnings,
+        checks=checks,
+        engine="builtin",
+        summary="Встроенная проверка структуры и параметров Helm-чарта",
+    )
+
+
+def _resolve_helm_binary() -> str | None:
+    helm_bin = os.getenv("HELM_BIN", "helm")
+    resolved = shutil.which(helm_bin)
+    if resolved:
+        return resolved
+    if os.path.sep in helm_bin and os.path.exists(helm_bin):
+        return helm_bin
+    return None
+
+
+def _extract_chart(chart, target_dir: str) -> str:
+    archive = build_chart_archive(chart)
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
+        tar.extractall(path=target_dir)
+    return os.path.join(target_dir, chart.name or "chart")
+
+
+def _clean_lines(text: str) -> list[str]:
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _run_helm_lint(chart, base_result: ValidationResult) -> ValidationResult:
+    helm_bin = _resolve_helm_binary()
+    if not helm_bin:
+        base_result.warnings.append("helm не найден в окружении, выполнена только встроенная проверка")
+        return base_result
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        chart_dir = _extract_chart(chart, tmpdir)
+        try:
+            completed = subprocess.run(
+                [helm_bin, "lint", chart_dir],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            base_result.warnings.append(
+                f"Не удалось выполнить helm lint ({exc}); показан результат встроенной проверки"
+            )
+            return base_result
+
+    stdout_lines = _clean_lines(completed.stdout)
+    stderr_lines = _clean_lines(completed.stderr)
+    infrastructure_error_markers = [
+        "snap-confine",
+        "Refusing to continue",
+        "cannot create user data directory",
+    ]
+
+    if any(marker in completed.stderr for marker in infrastructure_error_markers):
+        base_result.warnings.append(
+            "helm найден, но не смог запуститься в текущем окружении; показан результат встроенной проверки"
+        )
+        return base_result
+
+    checks = list(base_result.checks)
+    warnings = list(base_result.warnings)
+    errors = list(base_result.errors)
+
+    lint_lines = [
+        line
+        for line in stdout_lines + stderr_lines
+        if not line.startswith("==>")
+    ]
+
+    if completed.returncode == 0:
+        checks.append("helm lint завершился без ошибок")
+        checks.extend(lint_lines)
+        return ValidationResult(
+            valid=base_result.valid,
+            errors=errors,
+            warnings=warnings,
+            checks=checks,
+            engine="helm_lint",
+            summary="Проверка выполнена через helm lint",
+        )
+
+    for line in lint_lines:
+        if line not in errors:
+            errors.append(line)
+
+    if not errors:
+        errors.append("helm lint завершился с ошибкой")
+
+    return ValidationResult(
+        valid=False,
+        errors=errors,
+        warnings=warnings,
+        checks=checks,
+        engine="helm_lint",
+        summary="Проверка выполнена через helm lint и обнаружила проблемы",
+    )
+
+
+def validate_chart(chart) -> ValidationResult:
+    builtin_result = _builtin_validate(chart)
+    if not chart.generated_yaml:
+        return builtin_result
+    return _run_helm_lint(chart, builtin_result)

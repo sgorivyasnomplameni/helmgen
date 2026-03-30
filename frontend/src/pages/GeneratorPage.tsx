@@ -4,7 +4,8 @@ import WorkloadCard from '@/components/WorkloadCard'
 import ToggleSwitch from '@/components/ToggleSwitch'
 import YamlPreview from '@/components/YamlPreview'
 import RecommendationsBlock from '@/components/RecommendationsBlock'
-import { chartsApi } from '@/api/charts'
+import { chartsApi, type ChartValidationResult } from '@/api/charts'
+import { generateValuesYaml } from '@/utils/yamlGenerator'
 
 const DEFAULT_CONFIG: ChartConfig = {
   appName: '',
@@ -25,6 +26,127 @@ const DEFAULT_CONFIG: ChartConfig = {
 
 const WORKLOAD_TYPES: WorkloadType[] = ['Deployment', 'StatefulSet', 'DaemonSet']
 const SERVICE_TYPES: ServiceType[] = ['ClusterIP', 'NodePort', 'LoadBalancer']
+
+interface DemoScenario {
+  id: string
+  title: string
+  summary: string
+  highlights: string[]
+  config: ChartConfig
+}
+
+const DEMO_SCENARIOS: DemoScenario[] = [
+  {
+    id: 'landing',
+    title: 'Публичный лендинг',
+    summary: 'Простой Deployment с LoadBalancer и Ingress для внешнего доступа.',
+    highlights: ['Deployment', 'LoadBalancer', 'Ingress'],
+    config: {
+      appName: 'landing-page',
+      version: '0.3.0',
+      image: 'nginx',
+      imageTag: '1.27.0',
+      replicas: 2,
+      containerPort: 80,
+      workloadType: 'Deployment',
+      service: { enabled: true, port: 80, type: 'LoadBalancer' },
+      ingress: { enabled: true, host: 'landing.demo.local', path: '/' },
+      resources: {
+        enabled: true,
+        requests: { cpu: '100m', memory: '128Mi' },
+        limits: { cpu: '300m', memory: '256Mi' },
+      },
+    },
+  },
+  {
+    id: 'api',
+    title: 'Scalable API',
+    summary: 'API-сервис с несколькими репликами, NodePort и жёсткими лимитами.',
+    highlights: ['Deployment', '4 replicas', 'NodePort'],
+    config: {
+      appName: 'orders-api',
+      version: '1.4.2',
+      image: 'company/orders-api',
+      imageTag: '2.8.1',
+      replicas: 4,
+      containerPort: 8080,
+      workloadType: 'Deployment',
+      service: { enabled: true, port: 8080, type: 'NodePort' },
+      ingress: { enabled: false, host: 'orders.demo.local', path: '/' },
+      resources: {
+        enabled: true,
+        requests: { cpu: '250m', memory: '256Mi' },
+        limits: { cpu: '1000m', memory: '768Mi' },
+      },
+    },
+  },
+  {
+    id: 'postgres',
+    title: 'Stateful база',
+    summary: 'StatefulSet для БД с внутренним сервисом ClusterIP.',
+    highlights: ['StatefulSet', 'ClusterIP', 'Persistent workload'],
+    config: {
+      appName: 'postgres-db',
+      version: '12.1.0',
+      image: 'postgres',
+      imageTag: '16.4',
+      replicas: 1,
+      containerPort: 5432,
+      workloadType: 'StatefulSet',
+      service: { enabled: true, port: 5432, type: 'ClusterIP' },
+      ingress: { enabled: false, host: 'postgres.demo.local', path: '/' },
+      resources: {
+        enabled: true,
+        requests: { cpu: '300m', memory: '512Mi' },
+        limits: { cpu: '1200m', memory: '1Gi' },
+      },
+    },
+  },
+  {
+    id: 'agent',
+    title: 'Node агент',
+    summary: 'DaemonSet для логгера или мониторинга на каждой ноде кластера.',
+    highlights: ['DaemonSet', 'No replicas', 'Internal only'],
+    config: {
+      appName: 'node-exporter',
+      version: '0.8.0',
+      image: 'prom/node-exporter',
+      imageTag: '1.8.1',
+      replicas: 1,
+      containerPort: 9100,
+      workloadType: 'DaemonSet',
+      service: { enabled: false, port: 9100, type: 'ClusterIP' },
+      ingress: { enabled: false, host: 'agent.demo.local', path: '/' },
+      resources: {
+        enabled: true,
+        requests: { cpu: '80m', memory: '64Mi' },
+        limits: { cpu: '200m', memory: '128Mi' },
+      },
+    },
+  },
+  {
+    id: 'risky',
+    title: 'Антипример для рекомендаций',
+    summary: 'Небезопасная конфигурация, чтобы увидеть предупреждения системы.',
+    highlights: ['latest tag', '1 replica', 'No limits'],
+    config: {
+      appName: 'legacy-admin',
+      version: '0.1.0',
+      image: 'legacy/admin-panel',
+      imageTag: 'latest',
+      replicas: 1,
+      containerPort: 3000,
+      workloadType: 'Deployment',
+      service: { enabled: false, port: 3000, type: 'ClusterIP' },
+      ingress: { enabled: true, host: 'legacy.demo.local', path: '/' },
+      resources: {
+        enabled: false,
+        requests: { cpu: '100m', memory: '128Mi' },
+        limits: { cpu: '500m', memory: '512Mi' },
+      },
+    },
+  },
+]
 
 const card: React.CSSProperties = {
   background: 'white',
@@ -69,6 +191,16 @@ const divider: React.CSSProperties = {
   margin: '1.25rem 0',
 }
 
+const primaryButton: React.CSSProperties = {
+  border: 'none',
+  borderRadius: '0.75rem',
+  fontWeight: 700,
+  fontSize: '0.96rem',
+  padding: '0.875rem 1rem',
+  cursor: 'pointer',
+  transition: 'all 0.2s',
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -90,20 +222,32 @@ export default function GeneratorPage() {
   const [config, setConfig] = useState<ChartConfig>(DEFAULT_CONFIG)
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [generatedChartId, setGeneratedChartId] = useState<number | null>(null)
+  const [validation, setValidation] = useState<ChartValidationResult | null>(null)
+  const [isValidating, setIsValidating] = useState(false)
+
+  function resetGenerationState() {
+    setStatus('idle')
+    setGeneratedChartId(null)
+    setValidation(null)
+  }
 
   function set<K extends keyof ChartConfig>(key: K, value: ChartConfig[K]) {
+    resetGenerationState()
     setConfig(prev => ({ ...prev, [key]: value }))
   }
 
   function setService<K extends keyof ChartConfig['service']>(k: K, v: ChartConfig['service'][K]) {
+    resetGenerationState()
     setConfig(prev => ({ ...prev, service: { ...prev.service, [k]: v } }))
   }
 
   function setIngress<K extends keyof ChartConfig['ingress']>(k: K, v: ChartConfig['ingress'][K]) {
+    resetGenerationState()
     setConfig(prev => ({ ...prev, ingress: { ...prev.ingress, [k]: v } }))
   }
 
   function setResources<K extends keyof ChartConfig['resources']>(k: K, v: ChartConfig['resources'][K]) {
+    resetGenerationState()
     setConfig(prev => ({ ...prev, resources: { ...prev.resources, [k]: v } }))
   }
 
@@ -112,6 +256,7 @@ export default function GeneratorPage() {
     key: 'cpu' | 'memory',
     value: string
   ) {
+    resetGenerationState()
     setConfig(prev => ({
       ...prev,
       resources: {
@@ -119,6 +264,11 @@ export default function GeneratorPage() {
         [group]: { ...prev.resources[group], [key]: value },
       },
     }))
+  }
+
+  function applyScenario(scenario: DemoScenario) {
+    resetGenerationState()
+    setConfig(scenario.config)
   }
 
   function handleDownload() {
@@ -132,29 +282,49 @@ export default function GeneratorPage() {
   }
 
   async function handleGenerate() {
-    // If already generated — trigger download instead of re-generating
-    if (status === 'success' && generatedChartId) {
-      handleDownload()
-      return
-    }
     if (!config.appName.trim()) {
       alert('Введите название приложения')
       return
     }
     setStatus('loading')
+    setValidation(null)
     try {
-      const chart = await chartsApi.create({
+      const payload = {
         name: config.appName,
         description: `Generated chart for ${config.appName}`,
         chart_version: config.version,
         app_version: config.imageTag,
-      })
-      await chartsApi.generate(chart.id)
-      setGeneratedChartId(chart.id)
+        values_yaml: generateValuesYaml(config),
+      }
+      const chart = generatedChartId
+        ? await chartsApi.update(generatedChartId, payload)
+        : await chartsApi.create(payload)
+      const generatedChart = await chartsApi.generate(chart.id, payload.values_yaml)
+      setGeneratedChartId(generatedChart.id)
       setStatus('success')
     } catch {
       setStatus('error')
       setTimeout(() => setStatus('idle'), 3000)
+    }
+  }
+
+  async function handleValidate() {
+    if (!generatedChartId) return
+    setIsValidating(true)
+    try {
+      const result = await chartsApi.validate(generatedChartId)
+      setValidation(result)
+    } catch {
+      setValidation({
+        valid: false,
+        errors: ['Не удалось выполнить проверку чарта'],
+        warnings: [],
+        checks: [],
+        engine: 'builtin',
+        summary: 'Проверка завершилась с ошибкой запроса',
+      })
+    } finally {
+      setIsValidating(false)
     }
   }
 
@@ -181,6 +351,104 @@ export default function GeneratorPage() {
           <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: '#64748b' }}>
             Настройте параметры и получите готовый Helm-чарт
           </p>
+        </div>
+
+        <div
+          style={{
+            ...card,
+            background: 'linear-gradient(135deg, #fff7ed 0%, #ffffff 45%, #eff6ff 100%)',
+            border: '1px solid #fed7aa',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
+            <div>
+              <p style={{ ...sectionTitle, marginBottom: '0.35rem' }}>Тестовые сценарии</p>
+              <p style={{ margin: 0, fontSize: '0.86rem', color: '#7c2d12', lineHeight: 1.55 }}>
+                Выберите готовый демо-кейс, чтобы мгновенно заполнить форму, посмотреть YAML и увидеть реакцию рекомендательной системы.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                resetGenerationState()
+                setConfig(DEFAULT_CONFIG)
+              }}
+              style={{
+                border: 'none',
+                borderRadius: '999px',
+                background: '#fff',
+                color: '#9a3412',
+                fontWeight: 700,
+                fontSize: '0.78rem',
+                padding: '0.55rem 0.9rem',
+                cursor: 'pointer',
+                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.08)',
+              }}
+            >
+              Сбросить форму
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.9rem' }}>
+            {DEMO_SCENARIOS.map(scenario => {
+              const selected = config.appName === scenario.config.appName
+                && config.workloadType === scenario.config.workloadType
+                && config.imageTag === scenario.config.imageTag
+
+              return (
+                <button
+                  key={scenario.id}
+                  type="button"
+                  onClick={() => applyScenario(scenario)}
+                  style={{
+                    textAlign: 'left',
+                    border: `1.5px solid ${selected ? '#fb923c' : '#fdba74'}`,
+                    background: selected ? '#fff7ed' : 'rgba(255,255,255,0.88)',
+                    borderRadius: '0.9rem',
+                    padding: '1rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.8rem',
+                    transition: 'transform 0.15s, box-shadow 0.15s',
+                    boxShadow: selected ? '0 10px 24px rgba(249, 115, 22, 0.12)' : 'none',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#7c2d12' }}>
+                      {scenario.title}
+                    </div>
+                    <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', lineHeight: 1.5, color: '#9a3412' }}>
+                      {scenario.summary}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                    {scenario.highlights.map(item => (
+                      <span
+                        key={item}
+                        style={{
+                          padding: '0.28rem 0.5rem',
+                          borderRadius: '999px',
+                          background: '#ffedd5',
+                          color: '#c2410c',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: '0.76rem', color: '#78716c' }}>
+                    {scenario.config.appName}:{' '}
+                    {scenario.config.imageTag}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* ── Basic params ── */}
@@ -406,47 +674,146 @@ export default function GeneratorPage() {
         {/* ── Recommendations ── */}
         <RecommendationsBlock config={config} />
 
-        {/* ── Generate / Download button ── */}
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={status === 'loading'}
-          style={{
-            width: '100%',
-            padding: '0.875rem',
-            background:
-              status === 'success' ? '#16a34a' :
-              status === 'error'   ? '#dc2626' :
-              status === 'loading' ? '#93c5fd' :
-              '#2563eb',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.75rem',
-            fontWeight: 700,
-            fontSize: '1rem',
-            cursor: status === 'loading' ? 'not-allowed' : 'pointer',
-            transition: 'background 0.2s',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.625rem',
-          }}
-        >
-          {status === 'loading' && (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="white" style={{ animation: 'spin 1s linear infinite' }}>
-              <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z" />
-            </svg>
-          )}
-          {status === 'success' && (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
-              <path d="M19 9h-4V3H9v6H5l7 7 7-7zm-8 2V5h2v6h1.17L12 13.17 9.83 11H11zm-6 7h14v2H5v-2z" />
-            </svg>
-          )}
-          {status === 'success' ? `✓ Сгенерировано — Скачать архив` :
-           status === 'error'   ? '✗ Ошибка сохранения — попробовать снова' :
-           status === 'loading' ? 'Генерация...' :
-           'Сгенерировать Helm-чарт'}
-        </button>
+        <div style={{ ...card, padding: '1.1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={status === 'loading'}
+              style={{
+                ...primaryButton,
+                background: status === 'error' ? '#dc2626' : '#2563eb',
+                color: 'white',
+                cursor: status === 'loading' ? 'not-allowed' : 'pointer',
+                opacity: status === 'loading' ? 0.75 : 1,
+              }}
+            >
+              {status === 'loading' ? 'Генерация...' : 'Сгенерировать'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleValidate()}
+              disabled={!generatedChartId || isValidating || status === 'loading'}
+              style={{
+                ...primaryButton,
+                background: validation?.valid ? '#16a34a' : '#f59e0b',
+                color: 'white',
+                cursor: !generatedChartId || isValidating || status === 'loading' ? 'not-allowed' : 'pointer',
+                opacity: !generatedChartId || isValidating || status === 'loading' ? 0.55 : 1,
+              }}
+            >
+              {isValidating ? 'Проверка...' : 'Проверить chart'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={!generatedChartId}
+              style={{
+                ...primaryButton,
+                background: '#16a34a',
+                color: 'white',
+                cursor: !generatedChartId ? 'not-allowed' : 'pointer',
+                opacity: !generatedChartId ? 0.55 : 1,
+              }}
+            >
+              Скачать архив
+            </button>
+          </div>
+
+          <div style={{ marginTop: '0.85rem', fontSize: '0.84rem', color: '#64748b' }}>
+            {status === 'success' && 'Чарт успешно сгенерирован. Теперь его можно проверить и скачать отдельно.'}
+            {status === 'loading' && 'Идёт генерация Helm-чарта...'}
+            {status === 'error' && 'Во время генерации возникла ошибка. Попробуйте снова.'}
+            {status === 'idle' && 'Сначала сгенерируйте чарт, затем проверьте результат и скачайте архив.'}
+          </div>
+        </div>
+
+        {validation && (
+          <div
+            style={{
+              ...card,
+              border: `1px solid ${validation.valid ? '#bbf7d0' : '#fecaca'}`,
+              background: validation.valid ? '#f0fdf4' : '#fff7ed',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
+              <div>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                  Результат проверки
+                </div>
+                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
+                  {validation.summary || 'Проверка структуры и параметров Helm-чарта'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: '#e2e8f0',
+                    color: '#334155',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {validation.engine === 'helm_lint' ? 'helm lint' : 'builtin'}
+                </span>
+                <span
+                  style={{
+                    padding: '0.4rem 0.7rem',
+                    borderRadius: '999px',
+                    background: validation.valid ? '#dcfce7' : '#fee2e2',
+                    color: validation.valid ? '#166534' : '#b91c1c',
+                    fontWeight: 800,
+                    fontSize: '0.76rem',
+                  }}
+                >
+                  {validation.valid ? 'VALID' : 'INVALID'}
+                </span>
+              </div>
+            </div>
+
+            {validation.errors.length > 0 && (
+              <div style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Ошибки
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
+                  {validation.errors.map(item => (
+                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {validation.warnings.length > 0 && (
+              <div style={{ marginBottom: '0.85rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Предупреждения
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
+                  {validation.warnings.map(item => (
+                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#166534', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Успешные проверки
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#166534' }}>
+                {validation.checks.map(item => (
+                  <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
       </div>
 
