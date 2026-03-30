@@ -36,9 +36,10 @@ function formatDate(value: string): string {
 
 interface Props {
   active?: boolean
+  onOpenOps?: (chartId: number) => void
 }
 
-export default function HistoryPage({ active = true }: Props) {
+export default function HistoryPage({ active = true, onOpenOps }: Props) {
   const [charts, setCharts] = useState<Chart[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -205,6 +206,21 @@ export default function HistoryPage({ active = true }: Props) {
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {onOpenOps && (
+                      <button
+                        type="button"
+                        disabled={!isGenerated}
+                        onClick={() => onOpenOps(chart.id)}
+                        style={{
+                          ...actionButton,
+                          background: isGenerated ? 'var(--panel-contrast)' : 'var(--panel-contrast)',
+                          color: isGenerated ? 'var(--text)' : 'var(--text-muted)',
+                          cursor: isGenerated ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        Проверка и deploy
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={!isGenerated}

@@ -5,8 +5,6 @@ import ToggleSwitch from '@/components/ToggleSwitch'
 import RecommendationsBlock from '@/components/RecommendationsBlock'
 import {
   chartsApi,
-  type ChartDryRunResult,
-  type ChartTemplateResult,
   type ChartValidationResult,
 } from '@/api/charts'
 import {
@@ -38,7 +36,7 @@ const WORKLOAD_TYPES: WorkloadType[] = ['Deployment', 'StatefulSet', 'DaemonSet'
 const SERVICE_TYPES: ServiceType[] = ['ClusterIP', 'NodePort', 'LoadBalancer']
 const PREVIEW_TABS: YamlTab[] = ['deployment.yaml', 'service.yaml', 'ingress.yaml', 'Chart.yaml']
 
-type WorkspaceSection = 'preview' | 'lint' | 'template' | 'dry-run'
+type WorkspaceSection = 'preview' | 'lint'
 
 interface DemoScenario {
   id: string
@@ -227,22 +225,13 @@ interface ActionButtonConfig {
   label: string
   onClick: () => void
   disabled: boolean
-  tone: 'neutral' | 'success' | 'accent' | 'violet'
+  tone: 'neutral' | 'success' | 'accent'
 }
 
 type FormErrors = Partial<Record<
   'appName' | 'version' | 'image' | 'imageTag' | 'containerPort' | 'servicePort' | 'ingressHost' | 'ingressPath',
   string
 >>
-
-function summarizeDryRunError(errors: string[]): string | null {
-  const clusterError = errors.find(error => error.includes('Kubernetes cluster unreachable'))
-  if (clusterError) {
-    return 'Kubernetes-кластер недоступен. Dry-run deploy требует активного kube-context.'
-  }
-
-  return errors[0] ?? null
-}
 
 function getPreviewContent(tab: YamlTab, config: ChartConfig): string {
   switch (tab) {
@@ -280,7 +269,12 @@ function Grid2({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function GeneratorPage() {
+interface GeneratorPageProps {
+  onChartReady?: (chartId: number) => void
+  onOpenOps?: () => void
+}
+
+export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPageProps) {
   const formCardRef = useRef<HTMLDivElement | null>(null)
   const [config, setConfig] = useState<ChartConfig>(DEFAULT_CONFIG)
   const [formErrors, setFormErrors] = useState<FormErrors>({})
@@ -289,10 +283,6 @@ export default function GeneratorPage() {
   const [isDraftDirty, setIsDraftDirty] = useState(false)
   const [validation, setValidation] = useState<ChartValidationResult | null>(null)
   const [isValidating, setIsValidating] = useState(false)
-  const [templateResult, setTemplateResult] = useState<ChartTemplateResult | null>(null)
-  const [isTemplating, setIsTemplating] = useState(false)
-  const [dryRunResult, setDryRunResult] = useState<ChartDryRunResult | null>(null)
-  const [isDryRunning, setIsDryRunning] = useState(false)
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('preview')
   const [previewTab, setPreviewTab] = useState<YamlTab>('deployment.yaml')
   const [showScenarios, setShowScenarios] = useState(false)
@@ -304,8 +294,6 @@ export default function GeneratorPage() {
       setIsDraftDirty(true)
     }
     setValidation(null)
-    setTemplateResult(null)
-    setDryRunResult(null)
     setWorkspaceSection('preview')
   }
 
@@ -434,8 +422,6 @@ export default function GeneratorPage() {
     setFormErrors({})
     setStatus('loading')
     setValidation(null)
-    setTemplateResult(null)
-    setDryRunResult(null)
     setWorkspaceSection('preview')
 
     try {
@@ -452,6 +438,7 @@ export default function GeneratorPage() {
       const generatedChart = await chartsApi.generate(chart.id, payload.values_yaml)
       setGeneratedChartId(generatedChart.id)
       setIsDraftDirty(false)
+      onChartReady?.(generatedChart.id)
       setStatus('success')
     } catch {
       setStatus('error')
@@ -480,61 +467,13 @@ export default function GeneratorPage() {
     }
   }
 
-  async function handleTemplate() {
-    if (!generatedChartId) return
-    setIsTemplating(true)
-    setWorkspaceSection('template')
-    try {
-      const result = await chartsApi.template(generatedChartId)
-      setTemplateResult(result)
-    } catch {
-      setTemplateResult({
-        success: false,
-        rendered_manifests: '',
-        errors: ['Не удалось выполнить рендер манифестов'],
-        warnings: [],
-        engine: 'helm_template',
-        summary: 'Рендер завершился с ошибкой запроса',
-      })
-    } finally {
-      setIsTemplating(false)
-    }
-  }
-
-  async function handleDryRunDeploy() {
-    if (!generatedChartId) return
-    setIsDryRunning(true)
-    setWorkspaceSection('dry-run')
-    try {
-      const result = await chartsApi.dryRunDeploy(generatedChartId)
-      setDryRunResult(result)
-    } catch {
-      setDryRunResult({
-        success: false,
-        output: '',
-        errors: ['Не удалось выполнить dry-run deploy'],
-        warnings: [],
-        engine: 'helm_dry_run',
-        summary: 'Dry-run deploy завершился с ошибкой запроса',
-      })
-    } finally {
-      setIsDryRunning(false)
-    }
-  }
-
-  const latestResultSummary = dryRunResult
-    ? templateResult?.success && !dryRunResult.success
-      ? summarizeDryRunError(dryRunResult.errors) ?? dryRunResult.summary
-      : dryRunResult.summary
-    : templateResult
-      ? templateResult.summary
-      : validation
-        ? validation.summary
-        : isDraftDirty
-          ? 'Конфигурация изменилась. Пересоберите chart, чтобы проверки и архив снова стали актуальными.'
-        : generatedChartId
-          ? 'Чарт готов к проверке, рендеру и скачиванию.'
-          : 'Заполните форму и запустите сборку.'
+  const latestResultSummary = validation
+    ? validation.summary
+    : isDraftDirty
+      ? 'Конфигурация изменилась. Пересоберите chart, чтобы проверки и архив снова стали актуальными.'
+      : generatedChartId
+        ? 'Чарт готов к проверке, скачиванию или переходу в экран deploy.'
+        : 'Заполните форму и запустите сборку.'
 
   const previewContent = getPreviewContent(previewTab, deferredConfig)
   const configLooksReady = Boolean(
@@ -544,12 +483,7 @@ export default function GeneratorPage() {
       && config.imageTag.trim()
       && Object.keys(validateConfig()).length === 0,
   )
-  const reviewReady = Boolean(validation?.valid && templateResult?.success)
-  const dryRunNeedsCluster = Boolean(
-    dryRunResult
-      && !dryRunResult.success
-      && dryRunResult.errors.some(error => error.includes('Kubernetes cluster unreachable')),
-  )
+  const reviewReady = Boolean(validation?.valid)
   const canUseBuiltArtifact = Boolean(generatedChartId && !isDraftDirty)
 
   let primaryAction: PrimaryActionConfig = {
@@ -571,35 +505,34 @@ export default function GeneratorPage() {
   }
 
   const secondaryActions: ActionButtonConfig[] = [
-    {
-      key: 'validate',
-      label: isValidating ? 'Проверка...' : 'Проверить',
-      onClick: () => void handleValidate(),
-      disabled: !canUseBuiltArtifact || isValidating || status === 'loading',
-      tone: validation?.valid ? ('success' as const) : ('neutral' as const),
-    },
-    {
-      key: 'template',
-      label: isTemplating ? 'Рендер...' : 'Рендер',
-      onClick: () => void handleTemplate(),
-      disabled: !canUseBuiltArtifact || isTemplating || status === 'loading',
-      tone: templateResult?.success ? ('accent' as const) : ('neutral' as const),
-    },
-    {
-      key: 'dry-run',
-      label: isDryRunning ? 'Dry-run...' : 'Dry-run',
-      onClick: () => void handleDryRunDeploy(),
-      disabled: !canUseBuiltArtifact || isDryRunning || status === 'loading',
-      tone: dryRunResult?.success ? ('violet' as const) : ('neutral' as const),
-    },
-    {
-      key: 'download',
-      label: 'Скачать',
-      onClick: handleDownload,
-      disabled: !canUseBuiltArtifact,
-      tone: 'success' as const,
-    },
-  ].filter(() => Boolean(generatedChartId))
+    ...(!validation?.valid && canUseBuiltArtifact
+      ? [{
+          key: 'validate',
+          label: isValidating ? 'Проверка...' : 'Проверить',
+          onClick: () => void handleValidate(),
+          disabled: !canUseBuiltArtifact || isValidating || status === 'loading',
+          tone: 'neutral' as const,
+        }]
+      : []),
+    ...(canUseBuiltArtifact && onOpenOps
+      ? [{
+          key: 'ops',
+          label: 'Проверка и deploy',
+          onClick: onOpenOps,
+          disabled: !canUseBuiltArtifact,
+          tone: 'neutral' as const,
+        }]
+      : []),
+    ...(canUseBuiltArtifact
+      ? [{
+          key: 'download',
+          label: 'Скачать',
+          onClick: handleDownload,
+          disabled: !canUseBuiltArtifact,
+          tone: 'success' as const,
+        }]
+      : []),
+  ]
 
   if (canUseBuiltArtifact && !validation?.valid) {
     primaryAction = {
@@ -611,17 +544,7 @@ export default function GeneratorPage() {
     }
   }
 
-  if (canUseBuiltArtifact && validation?.valid && !templateResult?.success) {
-    primaryAction = {
-      key: 'template',
-      label: 'Рендер',
-      onClick: () => void handleTemplate(),
-      disabled: !canUseBuiltArtifact || isTemplating || status === 'loading',
-      loading: isTemplating,
-    }
-  }
-
-  if (canUseBuiltArtifact && templateResult?.success) {
+  if (canUseBuiltArtifact && validation?.valid) {
     primaryAction = {
       key: 'download',
       label: 'Скачать',
@@ -649,9 +572,8 @@ export default function GeneratorPage() {
     const order: Record<string, number> = {
       generate: 0,
       validate: 1,
-      template: 2,
-      download: 3,
-      'dry-run': 4,
+      download: 2,
+      ops: 3,
     }
 
     return order[a.key] - order[b.key]
@@ -685,15 +607,6 @@ export default function GeneratorPage() {
       disabled: !canUseBuiltArtifact,
       onClick: () => setWorkspaceSection('lint'),
     },
-    {
-      key: 'template',
-      label: 'Рендер',
-      state: templateResult?.success ? 'Готов' : 'Ожидает',
-      done: Boolean(templateResult?.success),
-      active: Boolean(canUseBuiltArtifact && validation?.valid && !templateResult?.success),
-      disabled: !canUseBuiltArtifact,
-      onClick: () => setWorkspaceSection('template'),
-    },
   ]
 
   return (
@@ -722,6 +635,113 @@ export default function GeneratorPage() {
         <div
           style={{
             ...card,
+            padding: '1.1rem 1.25rem',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text)' }}>
+                Тестовые сценарии
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  resetGenerationState()
+                  setConfig(DEFAULT_CONFIG)
+                }}
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: '999px',
+                  background: 'var(--panel-strong)',
+                  color: 'var(--text-soft)',
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  padding: '0.5rem 0.85rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Сбросить
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowScenarios(prev => !prev)}
+                style={{
+                  border: 'none',
+                  borderRadius: '999px',
+                  background: 'var(--accent-soft)',
+                  color: 'var(--accent-contrast)',
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  padding: '0.5rem 0.9rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {showScenarios ? 'Скрыть' : 'Показать'}
+              </button>
+            </div>
+          </div>
+
+          {showScenarios && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.9rem', marginTop: '1rem' }}>
+              {DEMO_SCENARIOS.map(scenario => {
+                const selected =
+                  config.appName === scenario.config.appName &&
+                  config.workloadType === scenario.config.workloadType &&
+                  config.imageTag === scenario.config.imageTag
+
+                return (
+                  <button
+                    key={scenario.id}
+                    type="button"
+                    onClick={() => applyScenario(scenario)}
+                    style={{
+                      textAlign: 'left',
+                      border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+                      background: selected ? 'var(--accent-soft)' : 'var(--panel-strong)',
+                      borderRadius: '0.9rem',
+                      padding: '1rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.8rem',
+                      boxShadow: selected ? 'var(--shadow)' : 'none',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text)' }}>{scenario.title}</div>
+                      <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>{scenario.summary}</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                      {scenario.highlights.map(item => (
+                        <span
+                          key={item}
+                          style={{
+                            padding: '0.28rem 0.5rem',
+                            borderRadius: '999px',
+                            background: 'var(--panel-contrast)',
+                            color: 'var(--text-soft)',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            ...card,
             padding: '1rem 1.1rem',
             background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
           }}
@@ -740,7 +760,7 @@ export default function GeneratorPage() {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.75rem', width: '100%' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.75rem', width: '100%' }}>
               {progressItems.map(item => (
                 <button
                   key={item.key}
@@ -776,7 +796,7 @@ export default function GeneratorPage() {
                       flexShrink: 0,
                     }}
                   >
-                    {item.done ? '✓' : item.key === 'config' ? '1' : item.key === 'chart' ? '2' : item.key === 'lint' ? '3' : '4'}
+                    {item.done ? '✓' : item.key === 'config' ? '1' : item.key === 'chart' ? '2' : '3'}
                   </span>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '0.18rem', minWidth: 0 }}>
                     <span style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text)' }}>{item.label}</span>
@@ -801,54 +821,71 @@ export default function GeneratorPage() {
           }}
         >
           <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Действия</div>
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            {toolbarActions.map(action => {
-              const toneStyles =
-                action.tone === 'success'
-                  ? {
-                      background: 'var(--success-soft)',
-                      color: 'var(--success)',
-                      border: '1px solid color-mix(in srgb, var(--success) 35%, transparent)',
-                    }
-                  : action.tone === 'accent'
-                    ? {
-                        background: 'var(--accent)',
-                        color: 'white',
-                        border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
-                      }
-                    : action.tone === 'violet'
-                      ? {
-                          background: 'rgba(139, 92, 246, 0.14)',
-                          color: '#a78bfa',
-                          border: '1px solid rgba(139, 92, 246, 0.25)',
-                        }
-                      : {
-                          background: 'var(--panel-strong)',
-                          color: 'var(--text-soft)',
-                          border: '1px solid var(--border)',
-                        }
+          <div style={{ display: 'grid', gap: '0.85rem' }}>
+            <div>
+              <div style={{ marginBottom: '0.55rem', fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Основное
+              </div>
+              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                {toolbarActions.filter(action => action.primary).map(action => (
+                  <button
+                    key={action.key}
+                    type="button"
+                    onClick={action.onClick}
+                    disabled={action.disabled}
+                    style={{
+                      borderRadius: '0.8rem',
+                      padding: '0.9rem 1.15rem',
+                      fontSize: '0.98rem',
+                      fontWeight: 800,
+                      cursor: action.disabled ? 'not-allowed' : 'pointer',
+                      opacity: action.disabled ? 0.5 : 1,
+                      minWidth: '220px',
+                      background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--accent)',
+                      color: action.tone === 'success' ? 'var(--success)' : 'white',
+                      border: action.tone === 'success'
+                        ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
+                        : '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+                    }}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-              return (
-                <button
-                  key={action.key}
-                  type="button"
-                  onClick={action.onClick}
-                  disabled={action.disabled}
-                  style={{
-                    borderRadius: '0.75rem',
-                    padding: action.primary ? '0.82rem 1.05rem' : '0.78rem 0.95rem',
-                    fontSize: '0.92rem',
-                    fontWeight: 700,
-                    cursor: action.disabled ? 'not-allowed' : 'pointer',
-                    opacity: action.disabled ? 0.5 : 1,
-                    minWidth: action.primary ? '180px' : undefined,
-                    ...toneStyles,
-                  }}
-                >
-                  {action.label}
-                </button>
-              )
-            })}
+            {toolbarActions.filter(action => !action.primary).length > 0 && (
+              <div>
+                <div style={{ marginBottom: '0.55rem', fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Дальше
+                </div>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {toolbarActions.filter(action => !action.primary).map(action => (
+                    <button
+                      key={action.key}
+                      type="button"
+                      onClick={action.onClick}
+                      disabled={action.disabled}
+                      style={{
+                        borderRadius: '0.75rem',
+                        padding: '0.78rem 0.95rem',
+                        fontSize: '0.9rem',
+                        fontWeight: 700,
+                        cursor: action.disabled ? 'not-allowed' : 'pointer',
+                        opacity: action.disabled ? 0.5 : 1,
+                        background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--panel-strong)',
+                        color: action.tone === 'success' ? 'var(--success)' : 'var(--text-soft)',
+                        border: action.tone === 'success'
+                          ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
+                          : '1px solid var(--border)',
+                      }}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
@@ -863,17 +900,12 @@ export default function GeneratorPage() {
                     border: '1px solid var(--border)',
                   }}
                 >
-                  Dry-run
+                  Deploy
                 </span>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Дополнительно, если есть kube-context.
+                  Рендер и dry-run доступны на отдельной странице.
                 </span>
               </>
-            )}
-            {dryRunNeedsCluster && (
-              <span style={{ fontSize: '0.8rem', color: 'var(--warning)' }}>
-                Кластер не подключён, но базовый сценарий уже завершён.
-              </span>
             )}
             {isDraftDirty && (
               <span style={{ fontSize: '0.8rem', color: 'var(--warning)' }}>
@@ -1130,112 +1162,6 @@ export default function GeneratorPage() {
           )}
         </div>
 
-        <div
-          style={{
-            ...card,
-            padding: '1.1rem 1.25rem',
-            border: '1px solid var(--border)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text)' }}>
-                Тестовые сценарии
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  resetGenerationState()
-                  setConfig(DEFAULT_CONFIG)
-                }}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: '999px',
-                  background: 'var(--panel-strong)',
-                  color: 'var(--text-soft)',
-                  fontWeight: 700,
-                  fontSize: '0.78rem',
-                  padding: '0.5rem 0.85rem',
-                  cursor: 'pointer',
-                }}
-              >
-                Сбросить
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowScenarios(prev => !prev)}
-                style={{
-                  border: 'none',
-                  borderRadius: '999px',
-                  background: 'var(--accent-soft)',
-                  color: 'var(--accent-contrast)',
-                  fontWeight: 700,
-                  fontSize: '0.78rem',
-                  padding: '0.5rem 0.9rem',
-                  cursor: 'pointer',
-                }}
-              >
-                {showScenarios ? 'Скрыть' : 'Показать'}
-              </button>
-            </div>
-          </div>
-
-          {showScenarios && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.9rem', marginTop: '1rem' }}>
-              {DEMO_SCENARIOS.map(scenario => {
-                const selected =
-                  config.appName === scenario.config.appName &&
-                  config.workloadType === scenario.config.workloadType &&
-                  config.imageTag === scenario.config.imageTag
-
-                return (
-                  <button
-                    key={scenario.id}
-                    type="button"
-                    onClick={() => applyScenario(scenario)}
-                    style={{
-                      textAlign: 'left',
-                      border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
-                      background: selected ? 'var(--accent-soft)' : 'var(--panel-strong)',
-                      borderRadius: '0.9rem',
-                      padding: '1rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.8rem',
-                      boxShadow: selected ? 'var(--shadow)' : 'none',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text)' }}>{scenario.title}</div>
-                      <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>{scenario.summary}</div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      {scenario.highlights.map(item => (
-                        <span
-                          key={item}
-                        style={{
-                          padding: '0.28rem 0.5rem',
-                          borderRadius: '999px',
-                          background: 'var(--panel-contrast)',
-                          color: 'var(--text-soft)',
-                          fontSize: '0.7rem',
-                          fontWeight: 700,
-                        }}
-                        >
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
       </div>
 
       <div style={{ position: 'sticky', top: '5.75rem' }}>
@@ -1252,36 +1178,16 @@ export default function GeneratorPage() {
           }}
         >
           <div style={{ padding: '1rem 1.25rem 0', background: 'var(--workspace-bg)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-              <div>
-                <div style={{ color: 'var(--workspace-muted)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                  Рабочая панель
-                </div>
+            <div style={{ marginBottom: '0.85rem' }}>
+              <div style={{ color: 'var(--workspace-muted)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                Результат
               </div>
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={!canUseBuiltArtifact}
-                style={{
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  padding: '0.45rem 0.75rem',
-                  background: canUseBuiltArtifact ? 'var(--accent)' : 'var(--workspace-surface)',
-                  color: canUseBuiltArtifact ? 'var(--workspace-text)' : 'var(--workspace-muted)',
-                  fontWeight: 700,
-                  cursor: canUseBuiltArtifact ? 'pointer' : 'not-allowed',
-                }}
-              >
-                Скачать .tgz
-              </button>
             </div>
 
             <div style={{ display: 'flex', gap: '0.25rem', overflowX: 'auto', marginBottom: '0.5rem' }}>
               {([
                 ['preview', 'Preview'],
                 ['lint', 'Lint'],
-                ['template', 'Template'],
-                ['dry-run', 'Dry-run'],
               ] as Array<[WorkspaceSection, string]>).map(([tab, label]) => {
                 const active = workspaceSection === tab
                 return (
@@ -1370,7 +1276,7 @@ export default function GeneratorPage() {
                 </div>
 
                 {!validation ? (
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Пока нет результата lint. Нажми `Проверить chart` слева.</div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Результат проверки появится после запуска проверки.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {validation.errors.length > 0 && (
@@ -1402,113 +1308,6 @@ export default function GeneratorPage() {
               </div>
             )}
 
-            {workspaceSection === 'template' && (
-              <div>
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Helm Template</div>
-                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <span style={{ ...stepChipBase, background: '#1e3a5f', color: '#dbeafe' }}>helm template</span>
-                      <span style={{ ...stepChipBase, background: templateResult?.success ? '#14532d' : templateResult ? '#7f1d1d' : '#334155', color: '#f8fafc' }}>{templateResult ? (templateResult.success ? 'RENDERED' : 'FAILED') : 'WAITING'}</span>
-                    </div>
-                  </div>
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
-                    {templateResult?.summary || 'После рендера здесь появятся итоговые Kubernetes-манифесты.'}
-                  </div>
-                </div>
-
-                {!templateResult ? (
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Пока нет результата template. Нажми `Template` слева.</div>
-                ) : (
-                  <>
-                    {templateResult.errors.length > 0 && (
-                      <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
-                        {templateResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
-                      </ul>
-                    )}
-                    <pre
-                      style={{
-                        margin: 0,
-                        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                        fontSize: '0.78rem',
-                        lineHeight: 1.7,
-                        color: '#dbeafe',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {templateResult.rendered_manifests || '# Helm template не вернул манифесты'}
-                    </pre>
-                  </>
-                )}
-              </div>
-            )}
-
-            {workspaceSection === 'dry-run' && (
-              <div>
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Dry-Run Deploy</div>
-                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <span style={{ ...stepChipBase, background: '#4c1d95', color: '#ede9fe' }}>helm dry-run</span>
-                      <span style={{ ...stepChipBase, background: dryRunResult?.success ? '#14532d' : dryRunResult ? '#7f1d1d' : '#334155', color: '#f8fafc' }}>{dryRunResult ? (dryRunResult.success ? 'READY' : 'FAILED') : 'WAITING'}</span>
-                    </div>
-                  </div>
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
-                    {dryRunResult?.summary || 'Dry-run deploy покажет, готов ли chart к шагу развёртывания.'}
-                  </div>
-                </div>
-
-                {!dryRunResult ? (
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Пока нет результата dry-run. Нажми `Dry-run` слева.</div>
-                ) : (
-                  <>
-                    {summarizeDryRunError(dryRunResult.errors) && (
-                      <div
-                        style={{
-                          marginBottom: '1rem',
-                          padding: '0.85rem 1rem',
-                          borderRadius: '0.8rem',
-                          background: '#312e81',
-                          border: '1px solid #8b5cf6',
-                          color: '#ddd6fe',
-                          fontSize: '0.84rem',
-                          lineHeight: 1.55,
-                        }}
-                      >
-                        {summarizeDryRunError(dryRunResult.errors)}
-                      </div>
-                    )}
-
-                    <details>
-                      <summary style={{ cursor: 'pointer', color: '#c4b5fd', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.85rem' }}>
-                        Показать технические детали
-                      </summary>
-                      <div style={{ marginTop: '0.75rem' }}>
-                        {dryRunResult.errors.length > 0 && (
-                          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
-                            {dryRunResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
-                          </ul>
-                        )}
-                        <pre
-                          style={{
-                            margin: 0,
-                            fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                            fontSize: '0.78rem',
-                            lineHeight: 1.7,
-                            color: '#e9d5ff',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                          }}
-                        >
-                          {dryRunResult.output || '# Dry-run deploy не вернул вывод'}
-                        </pre>
-                      </div>
-                    </details>
-                  </>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>

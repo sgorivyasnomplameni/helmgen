@@ -1,12 +1,14 @@
 import { startTransition, useEffect, useState } from 'react'
 import GeneratorPage from '@/pages/GeneratorPage'
 import HistoryPage from '@/pages/HistoryPage'
+import OpsPage from '@/pages/OpsPage'
 
-type View = 'generator' | 'history'
+type View = 'generator' | 'ops' | 'history'
 type Theme = 'light' | 'dark'
 
 export default function App() {
   const [view, setView] = useState<View>('generator')
+  const [activeChartId, setActiveChartId] = useState<number | null>(null)
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = window.localStorage.getItem('helmgen-theme')
     return saved === 'dark' ? 'dark' : 'light'
@@ -114,16 +116,47 @@ export default function App() {
               >
                 История
               </button>
+              <button
+                type="button"
+                onClick={() => setView('ops')}
+                style={{
+                  border: 'none',
+                  borderRadius: '999px',
+                  padding: '0.6rem 1rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: view === 'ops' ? 'var(--workspace-bg)' : 'transparent',
+                  color: view === 'ops' ? 'var(--workspace-text)' : 'var(--text-soft)',
+                }}
+              >
+                Проверка и deploy
+              </button>
             </div>
           </div>
         </div>
       </header>
 
       <div style={{ display: view === 'generator' ? 'block' : 'none' }}>
-        <GeneratorPage />
+        <GeneratorPage
+          onChartReady={chartId => setActiveChartId(chartId)}
+          onOpenOps={() => setView('ops')}
+        />
+      </div>
+      <div style={{ display: view === 'ops' ? 'block' : 'none' }}>
+        <OpsPage
+          active={view === 'ops'}
+          activeChartId={activeChartId}
+          onOpenGenerator={() => setView('generator')}
+        />
       </div>
       <div style={{ display: view === 'history' ? 'block' : 'none' }}>
-        <HistoryPage active={view === 'history'} />
+        <HistoryPage
+          active={view === 'history'}
+          onOpenOps={chartId => {
+            setActiveChartId(chartId)
+            setView('ops')
+          }}
+        />
       </div>
     </div>
   )
