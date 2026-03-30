@@ -223,13 +223,11 @@ const stepChipBase: React.CSSProperties = {
   fontWeight: 700,
 }
 
-type PipelineStepState = 'idle' | 'active' | 'done'
-
-interface PipelineStep {
-  id: string
+interface PrimaryActionConfig {
   label: string
-  caption: string
-  state: PipelineStepState
+  onClick: () => void
+  disabled: boolean
+  loading: boolean
 }
 
 type FormErrors = Partial<Record<
@@ -530,38 +528,84 @@ export default function GeneratorPage() {
           : 'Настройте chart и запустите следующий шаг.'
 
   const previewContent = getPreviewContent(previewTab, deferredConfig)
-  const pipelineSteps: PipelineStep[] = [
+  const stageLabel = dryRunResult?.success
+    ? 'Готово'
+    : templateResult?.success
+      ? 'Dry-run'
+      : validation?.valid
+        ? 'Рендер'
+        : generatedChartId
+          ? 'Проверка'
+          : 'Черновик'
+
+  let primaryAction: PrimaryActionConfig = {
+    label: 'Сгенерировать',
+    onClick: handleGenerate,
+    disabled: status === 'loading',
+    loading: status === 'loading',
+  }
+
+  const secondaryActions = [
     {
-      id: 'generate',
-      label: 'Generate',
-      caption: generatedChartId ? 'Chart assembled' : 'Создать chart',
-      state: generatedChartId ? 'done' : 'active',
+      key: 'validate',
+      label: isValidating ? 'Проверка...' : 'Проверить',
+      onClick: () => void handleValidate(),
+      disabled: !generatedChartId || isValidating || status === 'loading',
+      visible: Boolean(generatedChartId),
+      tone: validation?.valid ? 'success' : 'neutral',
     },
     {
-      id: 'lint',
-      label: 'Lint',
-      caption: validation?.valid ? 'Validated' : generatedChartId ? 'Проверить chart' : 'Locked',
-      state: validation?.valid ? 'done' : generatedChartId ? 'active' : 'idle',
+      key: 'template',
+      label: isTemplating ? 'Рендер...' : 'Рендер',
+      onClick: () => void handleTemplate(),
+      disabled: !generatedChartId || isTemplating || status === 'loading',
+      visible: Boolean(generatedChartId),
+      tone: templateResult?.success ? 'accent' : 'neutral',
     },
     {
-      id: 'template',
-      label: 'Render',
-      caption: templateResult?.success ? 'Manifest ready' : validation?.valid ? 'Рендер манифестов' : 'Locked',
-      state: templateResult?.success ? 'done' : validation?.valid ? 'active' : 'idle',
+      key: 'dry-run',
+      label: isDryRunning ? 'Dry-run...' : 'Dry-run',
+      onClick: () => void handleDryRunDeploy(),
+      disabled: !generatedChartId || isDryRunning || status === 'loading',
+      visible: Boolean(generatedChartId),
+      tone: dryRunResult?.success ? 'violet' : 'neutral',
     },
     {
-      id: 'dry-run',
+      key: 'download',
+      label: 'Скачать',
+      onClick: handleDownload,
+      disabled: !generatedChartId,
+      visible: Boolean(generatedChartId),
+      tone: 'success',
+    },
+  ].filter(action => action.visible)
+
+  if (generatedChartId && !validation?.valid) {
+    primaryAction = {
+      label: 'Проверить',
+      onClick: () => void handleValidate(),
+      disabled: !generatedChartId || isValidating || status === 'loading',
+      loading: isValidating,
+    }
+  }
+
+  if (validation?.valid && !templateResult?.success) {
+    primaryAction = {
+      label: 'Рендер',
+      onClick: () => void handleTemplate(),
+      disabled: !generatedChartId || isTemplating || status === 'loading',
+      loading: isTemplating,
+    }
+  }
+
+  if (templateResult?.success && !dryRunResult?.success) {
+    primaryAction = {
       label: 'Dry-run',
-      caption: dryRunResult?.success ? 'Preflight passed' : templateResult?.success ? 'Пробный deploy' : 'Locked',
-      state: dryRunResult?.success ? 'done' : templateResult?.success ? 'active' : 'idle',
-    },
-    {
-      id: 'download',
-      label: 'Download',
-      caption: generatedChartId ? 'Архив доступен' : 'Locked',
-      state: generatedChartId ? (dryRunResult?.success ? 'done' : 'active') : 'idle',
-    },
-  ]
+      onClick: () => void handleDryRunDeploy(),
+      disabled: !generatedChartId || isDryRunning || status === 'loading',
+      loading: isDryRunning,
+    }
+  }
 
   return (
     <div
@@ -831,135 +875,146 @@ export default function GeneratorPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
             <div>
               <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
-                Pipeline
+                Как работать
+              </div>
+              <div style={{ marginTop: '0.25rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                {generatedChartId
+                  ? 'Chart уже собран. Дальше можно по шагам проверить, отрендерить и скачать результат.'
+                  : 'Сначала заполните форму или выберите тестовый сценарий, затем нажмите одну главную кнопку.'}
               </div>
             </div>
             <span style={{ ...stepChipBase, background: 'var(--panel-strong)', color: 'var(--text-soft)', border: '1px solid var(--border)' }}>
-              {dryRunResult?.success ? 'Ready to ship' : templateResult?.success ? 'Preflight stage' : validation?.valid ? 'Validation stage' : generatedChartId ? 'Draft ready' : 'Editing'}
+              {stageLabel}
             </span>
           </div>
 
           <div
             style={{
-              position: 'relative',
               display: 'grid',
-              gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
               gap: '0.75rem',
               alignItems: 'start',
               marginBottom: '1rem',
             }}
           >
-            <div
-              style={{
-                position: 'absolute',
-                top: '1rem',
-                left: '10%',
-                right: '10%',
-                height: '1px',
-                background: 'var(--border)',
-                zIndex: 0,
-              }}
-            />
-            {pipelineSteps.map(step => {
-              const isDone = step.state === 'done'
-              const isActive = step.state === 'active'
-              return (
+            {[
+              {
+                key: 'setup',
+                number: '1',
+                title: 'Настройка',
+                text: 'Заполните базовые параметры приложения или откройте тестовый сценарий.',
+                active: !generatedChartId,
+                done: Boolean(generatedChartId),
+              },
+              {
+                key: 'build',
+                number: '2',
+                title: 'Сборка',
+                text: 'Соберите Helm-чарт и получите первую рабочую версию конфигурации.',
+                active: !generatedChartId,
+                done: Boolean(generatedChartId),
+              },
+              {
+                key: 'check',
+                number: '3',
+                title: 'Проверка и экспорт',
+                text: 'Проверьте chart, выполните dry-run и скачайте архив, когда результат устроит.',
+                active: Boolean(generatedChartId),
+                done: Boolean(dryRunResult?.success),
+              },
+            ].map(step => (
+              <div
+                key={step.key}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.55rem',
+                  padding: '1rem',
+                  borderRadius: '0.9rem',
+                  background: step.active ? 'var(--panel-strong)' : 'var(--panel)',
+                  border: `1px solid ${step.done ? 'var(--success)' : step.active ? 'var(--accent)' : 'var(--border)'}`,
+                  boxShadow: step.active ? 'inset 0 0 0 1px rgba(59, 130, 246, 0.18)' : 'none',
+                }}
+              >
                 <div
-                  key={step.id}
                   style={{
-                    position: 'relative',
-                    zIndex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    textAlign: 'center',
-                    gap: '0.5rem',
+                    justifyContent: 'center',
+                    width: '2rem',
+                    height: '2rem',
+                    borderRadius: '999px',
+                    background: step.done ? 'var(--success-soft)' : step.active ? 'var(--accent-soft)' : 'var(--panel-contrast)',
+                    color: step.done ? 'var(--success)' : step.active ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
                   }}
                 >
-                  <div
-                    style={{
-                      width: '2rem',
-                      height: '2rem',
-                      borderRadius: '999px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.8rem',
-                      fontWeight: 800,
-                      background: isDone ? 'var(--success)' : isActive ? 'var(--accent)' : 'var(--panel-strong)',
-                      color: isDone || isActive ? 'white' : 'var(--text-muted)',
-                      border: `1px solid ${isDone ? 'var(--success)' : isActive ? 'var(--accent)' : 'var(--border)'}`,
-                      boxShadow: isActive ? '0 0 0 4px rgba(59, 130, 246, 0.12)' : 'none',
-                    }}
-                  >
-                    {isDone ? '✓' : step.id === 'download' ? '↓' : step.label.slice(0, 1)}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: isDone ? 'var(--success)' : isActive ? 'var(--text)' : 'var(--text-soft)' }}>
-                      {step.label}
-                    </div>
-                    <div style={{ marginTop: '0.2rem', fontSize: '0.72rem', lineHeight: 1.45, color: 'var(--text-muted)' }}>
-                      {step.caption}
-                    </div>
-                  </div>
+                  {step.done ? '✓' : step.number}
                 </div>
-              )
-            })}
+                <div style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--text)' }}>
+                  {step.title}
+                </div>
+                <div style={{ fontSize: '0.78rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+                  {step.text}
+                </div>
+              </div>
+            ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1fr', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem', alignItems: 'flex-start', marginTop: '0.25rem' }}>
             <button
               type="button"
-              onClick={handleGenerate}
-              disabled={status === 'loading'}
-              style={{ ...primaryButton, background: status === 'error' ? 'var(--danger)' : 'var(--accent)', color: 'white', cursor: status === 'loading' ? 'not-allowed' : 'pointer', opacity: status === 'loading' ? 0.75 : 1 }}
+              onClick={primaryAction.onClick}
+              disabled={primaryAction.disabled}
+              style={{ ...primaryButton, minWidth: '220px', background: status === 'error' ? 'var(--danger)' : 'var(--accent)', color: 'white', cursor: primaryAction.disabled ? 'not-allowed' : 'pointer', opacity: primaryAction.disabled ? 0.75 : 1 }}
             >
-              {status === 'loading' ? 'Генерация...' : 'Сгенерировать'}
+              {primaryAction.loading ? `${primaryAction.label}...` : primaryAction.label}
             </button>
-            <button
-              type="button"
-              onClick={() => void handleValidate()}
-              disabled={!generatedChartId || isValidating || status === 'loading'}
-              style={{ ...primaryButton, background: 'var(--panel-strong)', color: validation?.valid ? 'var(--success)' : 'var(--text-soft)', border: `1px solid ${validation?.valid ? 'var(--success)' : 'var(--border)'}`, cursor: !generatedChartId || isValidating || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isValidating || status === 'loading' ? 0.55 : 1 }}
-            >
-              {isValidating ? 'Проверка...' : 'Lint'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleTemplate()}
-              disabled={!generatedChartId || isTemplating || status === 'loading'}
-              style={{ ...primaryButton, background: 'var(--panel-strong)', color: templateResult?.success ? 'var(--accent-contrast)' : 'var(--text-soft)', border: `1px solid ${templateResult?.success ? 'var(--accent)' : 'var(--border)'}`, cursor: !generatedChartId || isTemplating || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isTemplating || status === 'loading' ? 0.55 : 1 }}
-            >
-              {isTemplating ? 'Рендер...' : 'Template'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleDryRunDeploy()}
-              disabled={!generatedChartId || isDryRunning || status === 'loading'}
-              style={{ ...primaryButton, background: 'var(--panel-strong)', color: dryRunResult?.success ? '#8b5cf6' : 'var(--text-soft)', border: `1px solid ${dryRunResult?.success ? '#8b5cf6' : 'var(--border)'}`, cursor: !generatedChartId || isDryRunning || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isDryRunning || status === 'loading' ? 0.55 : 1 }}
-            >
-              {isDryRunning ? 'Dry-run...' : 'Dry-run'}
-            </button>
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={!generatedChartId}
-              style={{ ...primaryButton, background: 'var(--success)', color: 'white', cursor: !generatedChartId ? 'not-allowed' : 'pointer', opacity: !generatedChartId ? 0.55 : 1 }}
-            >
-              Скачать
-            </button>
+            {secondaryActions.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Другие действия
+                </span>
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                  {secondaryActions.map(action => (
+                    <button
+                      key={action.key}
+                      type="button"
+                      onClick={action.onClick}
+                      disabled={action.disabled}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color:
+                          action.tone === 'success'
+                            ? 'var(--success)'
+                            : action.tone === 'accent'
+                              ? 'var(--accent-contrast)'
+                              : action.tone === 'violet'
+                                ? '#8b5cf6'
+                                : 'var(--text-soft)',
+                        cursor: action.disabled ? 'not-allowed' : 'pointer',
+                        opacity: action.disabled ? 0.45 : 1,
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        padding: '0.1rem 0.15rem',
+                      }}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div
             style={{
-              marginTop: '0.9rem',
-              padding: '0.8rem 0.95rem',
-              borderRadius: '0.75rem',
-              background: 'var(--panel)',
-              border: `1px solid ${Object.keys(formErrors).length > 0 ? 'var(--danger)' : 'var(--border)'}`,
-              fontSize: '0.83rem',
-              color: Object.keys(formErrors).length > 0 ? 'var(--danger)' : 'var(--text-soft)',
-              lineHeight: 1.55,
+              marginTop: '0.75rem',
+              fontSize: '0.82rem',
+              color: Object.keys(formErrors).length > 0 ? 'var(--danger)' : 'var(--text-muted)',
+              lineHeight: 1.5,
             }}
           >
             {Object.keys(formErrors).length > 0
