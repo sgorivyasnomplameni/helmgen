@@ -232,6 +232,11 @@ interface PipelineStep {
   state: PipelineStepState
 }
 
+type FormErrors = Partial<Record<
+  'appName' | 'version' | 'image' | 'imageTag' | 'containerPort' | 'servicePort' | 'ingressHost' | 'ingressPath',
+  string
+>>
+
 function summarizeDryRunError(errors: string[]): string | null {
   const clusterError = errors.find(error => error.includes('Kubernetes cluster unreachable'))
   if (clusterError) {
@@ -279,6 +284,7 @@ function Grid2({ children }: { children: React.ReactNode }) {
 
 export default function GeneratorPage() {
   const [config, setConfig] = useState<ChartConfig>(DEFAULT_CONFIG)
+  const [formErrors, setFormErrors] = useState<FormErrors>({})
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [generatedChartId, setGeneratedChartId] = useState<number | null>(null)
   const [validation, setValidation] = useState<ChartValidationResult | null>(null)
@@ -303,16 +309,38 @@ export default function GeneratorPage() {
 
   function set<K extends keyof ChartConfig>(key: K, value: ChartConfig[K]) {
     resetGenerationState()
+    setFormErrors(prev => {
+      const next = { ...prev }
+      if (key === 'appName') delete next.appName
+      if (key === 'version') delete next.version
+      if (key === 'image') delete next.image
+      if (key === 'imageTag') delete next.imageTag
+      if (key === 'containerPort') delete next.containerPort
+      return next
+    })
     setConfig(prev => ({ ...prev, [key]: value }))
   }
 
   function setService<K extends keyof ChartConfig['service']>(k: K, v: ChartConfig['service'][K]) {
     resetGenerationState()
+    if (k === 'port') {
+      setFormErrors(prev => {
+        const next = { ...prev }
+        delete next.servicePort
+        return next
+      })
+    }
     setConfig(prev => ({ ...prev, service: { ...prev.service, [k]: v } }))
   }
 
   function setIngress<K extends keyof ChartConfig['ingress']>(k: K, v: ChartConfig['ingress'][K]) {
     resetGenerationState()
+    setFormErrors(prev => {
+      const next = { ...prev }
+      if (k === 'host') delete next.ingressHost
+      if (k === 'path') delete next.ingressPath
+      return next
+    })
     setConfig(prev => ({ ...prev, ingress: { ...prev.ingress, [k]: v } }))
   }
 
@@ -334,7 +362,54 @@ export default function GeneratorPage() {
 
   function applyScenario(scenario: DemoScenario) {
     resetGenerationState()
+    setFormErrors({})
     setConfig(scenario.config)
+  }
+
+  function validateConfig(): FormErrors {
+    const errors: FormErrors = {}
+
+    if (!config.appName.trim()) {
+      errors.appName = 'Укажите название приложения.'
+    } else if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(config.appName.trim())) {
+      errors.appName = 'Используйте только lowercase, цифры и дефисы.'
+    }
+
+    if (!config.version.trim()) {
+      errors.version = 'Укажите версию чарта.'
+    }
+
+    if (!config.image.trim()) {
+      errors.image = 'Укажите Docker-образ.'
+    }
+
+    if (!config.imageTag.trim()) {
+      errors.imageTag = 'Укажите тег образа.'
+    }
+
+    if (!Number.isInteger(config.containerPort) || config.containerPort < 1 || config.containerPort > 65535) {
+      errors.containerPort = 'Порт контейнера должен быть в диапазоне 1-65535.'
+    }
+
+    if (config.service.enabled && (!Number.isInteger(config.service.port) || config.service.port < 1 || config.service.port > 65535)) {
+      errors.servicePort = 'Порт Service должен быть в диапазоне 1-65535.'
+    }
+
+    if (config.ingress.enabled) {
+      if (!config.ingress.host.trim()) {
+        errors.ingressHost = 'Укажите host для Ingress.'
+      } else if (!/^[a-z0-9.-]+$/.test(config.ingress.host.trim())) {
+        errors.ingressHost = 'Host должен содержать только lowercase, точки и дефисы.'
+      }
+
+      if (!config.ingress.path.trim()) {
+        errors.ingressPath = 'Укажите path для Ingress.'
+      } else if (!config.ingress.path.startsWith('/')) {
+        errors.ingressPath = 'Path должен начинаться с /.'
+      }
+    }
+
+    return errors
   }
 
   function handleDownload() {
@@ -348,11 +423,13 @@ export default function GeneratorPage() {
   }
 
   async function handleGenerate() {
-    if (!config.appName.trim()) {
-      alert('Введите название приложения')
+    const errors = validateConfig()
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
       return
     }
 
+    setFormErrors({})
     setStatus('loading')
     setValidation(null)
     setTemplateResult(null)
@@ -450,7 +527,7 @@ export default function GeneratorPage() {
         ? validation.summary
         : generatedChartId
           ? 'Chart готов к следующим шагам проверки и подготовки к развёртыванию.'
-          : 'Результаты операций будут появляться во вкладках справа, без автоскролла по странице.'
+          : 'Настройте chart и запустите следующий шаг.'
 
   const previewContent = getPreviewContent(previewTab, deferredConfig)
   const pipelineSteps: PipelineStep[] = [
@@ -463,25 +540,25 @@ export default function GeneratorPage() {
     {
       id: 'lint',
       label: 'Lint',
-      caption: validation?.valid ? 'Validated' : generatedChartId ? 'Проверить chart' : 'Ждёт generate',
+      caption: validation?.valid ? 'Validated' : generatedChartId ? 'Проверить chart' : 'Locked',
       state: validation?.valid ? 'done' : generatedChartId ? 'active' : 'idle',
     },
     {
       id: 'template',
-      label: 'Template',
-      caption: templateResult?.success ? 'Manifest ready' : validation?.valid ? 'Рендер манифестов' : 'После lint',
+      label: 'Render',
+      caption: templateResult?.success ? 'Manifest ready' : validation?.valid ? 'Рендер манифестов' : 'Locked',
       state: templateResult?.success ? 'done' : validation?.valid ? 'active' : 'idle',
     },
     {
       id: 'dry-run',
       label: 'Dry-run',
-      caption: dryRunResult?.success ? 'Preflight passed' : templateResult?.success ? 'Пробный deploy' : 'После template',
+      caption: dryRunResult?.success ? 'Preflight passed' : templateResult?.success ? 'Пробный deploy' : 'Locked',
       state: dryRunResult?.success ? 'done' : templateResult?.success ? 'active' : 'idle',
     },
     {
       id: 'download',
       label: 'Download',
-      caption: generatedChartId ? 'Архив доступен' : 'Архив появится после generate',
+      caption: generatedChartId ? 'Архив доступен' : 'Locked',
       state: generatedChartId ? (dryRunResult?.success ? 'done' : 'active') : 'idle',
     },
   ]
@@ -507,9 +584,6 @@ export default function GeneratorPage() {
           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>
             Генератор Helm-чартов
           </h1>
-          <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            Сначала настройте конфигурацию приложения, затем переходите к lint, template и dry-run.
-          </p>
         </div>
 
         <div style={card}>
@@ -517,18 +591,69 @@ export default function GeneratorPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <Grid2>
               <Field label="Название приложения">
-                <input style={input} placeholder="myapp" value={config.appName} onChange={e => set('appName', e.target.value)} />
+                <div>
+                  <input
+                    style={{
+                      ...input,
+                      border: formErrors.appName ? '1px solid var(--danger)' : input.border,
+                    }}
+                    placeholder="myapp"
+                    value={config.appName}
+                    onChange={e => set('appName', e.target.value)}
+                  />
+                  {formErrors.appName && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                      {formErrors.appName}
+                    </div>
+                  )}
+                </div>
               </Field>
               <Field label="Версия чарта">
-                <input style={input} placeholder="0.1.0" value={config.version} onChange={e => set('version', e.target.value)} />
+                <div>
+                  <input
+                    style={{ ...input, border: formErrors.version ? '1px solid var(--danger)' : input.border }}
+                    placeholder="0.1.0"
+                    value={config.version}
+                    onChange={e => set('version', e.target.value)}
+                  />
+                  {formErrors.version && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                      {formErrors.version}
+                    </div>
+                  )}
+                </div>
               </Field>
             </Grid2>
             <Grid2>
               <Field label="Docker образ">
-                <input style={input} placeholder="nginx" value={config.image} onChange={e => set('image', e.target.value)} />
+                <div>
+                  <input
+                    style={{ ...input, border: formErrors.image ? '1px solid var(--danger)' : input.border }}
+                    placeholder="nginx"
+                    value={config.image}
+                    onChange={e => set('image', e.target.value)}
+                  />
+                  {formErrors.image && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                      {formErrors.image}
+                    </div>
+                  )}
+                </div>
               </Field>
               <Field label="Тег образа">
-                <input style={input} placeholder="latest" value={config.imageTag} onChange={e => set('imageTag', e.target.value)} />
+                <div>
+                  <input
+                    style={{ ...input, border: formErrors.imageTag ? '1px solid var(--danger)' : input.border }}
+                    placeholder="latest"
+                    value={config.imageTag}
+                    onChange={e => set('imageTag', e.target.value)}
+                  />
+                  {formErrors.imageTag && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                      {formErrors.imageTag}
+                    </div>
+                  )}
+                </div>
               </Field>
             </Grid2>
             <Grid2>
@@ -543,7 +668,21 @@ export default function GeneratorPage() {
                 />
               </Field>
               <Field label="Порт контейнера">
-                <input style={input} type="number" min={1} max={65535} value={config.containerPort} onChange={e => set('containerPort', Number(e.target.value))} />
+                <div>
+                  <input
+                    style={{ ...input, border: formErrors.containerPort ? '1px solid var(--danger)' : input.border }}
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={config.containerPort}
+                    onChange={e => set('containerPort', Number(e.target.value))}
+                  />
+                  {formErrors.containerPort && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                      {formErrors.containerPort}
+                    </div>
+                  )}
+                </div>
               </Field>
             </Grid2>
           </div>
@@ -566,7 +705,19 @@ export default function GeneratorPage() {
             {config.service.enabled && (
               <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
                 <Field label="Порт">
-                  <input style={{ ...input, width: '120px' }} type="number" value={config.service.port} onChange={e => setService('port', Number(e.target.value))} />
+                  <div>
+                    <input
+                      style={{ ...input, width: '120px', border: formErrors.servicePort ? '1px solid var(--danger)' : input.border }}
+                      type="number"
+                      value={config.service.port}
+                      onChange={e => setService('port', Number(e.target.value))}
+                    />
+                    {formErrors.servicePort && (
+                      <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)', maxWidth: '180px' }}>
+                        {formErrors.servicePort}
+                      </div>
+                    )}
+                  </div>
                 </Field>
                 <div style={{ flex: 1 }}>
                   <label style={fieldLabel}>Тип Service</label>
@@ -605,10 +756,34 @@ export default function GeneratorPage() {
               <div style={{ marginTop: '1rem' }}>
                 <Grid2>
                   <Field label="Хост">
-                    <input style={input} placeholder="myapp.example.com" value={config.ingress.host} onChange={e => setIngress('host', e.target.value)} />
+                    <div>
+                      <input
+                        style={{ ...input, border: formErrors.ingressHost ? '1px solid var(--danger)' : input.border }}
+                        placeholder="myapp.example.com"
+                        value={config.ingress.host}
+                        onChange={e => setIngress('host', e.target.value)}
+                      />
+                      {formErrors.ingressHost && (
+                        <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                          {formErrors.ingressHost}
+                        </div>
+                      )}
+                    </div>
                   </Field>
                   <Field label="Путь">
-                    <input style={input} placeholder="/" value={config.ingress.path} onChange={e => setIngress('path', e.target.value)} />
+                    <div>
+                      <input
+                        style={{ ...input, border: formErrors.ingressPath ? '1px solid var(--danger)' : input.border }}
+                        placeholder="/"
+                        value={config.ingress.path}
+                        onChange={e => setIngress('path', e.target.value)}
+                      />
+                      {formErrors.ingressPath && (
+                        <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                          {formErrors.ingressPath}
+                        </div>
+                      )}
+                    </div>
                   </Field>
                 </Grid2>
               </div>
@@ -657,9 +832,6 @@ export default function GeneratorPage() {
             <div>
               <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
                 Pipeline
-              </div>
-              <div style={{ marginTop: '0.2rem', fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                Визуальная цепочка показывает, на каком этапе подготовки Helm-чарта вы находитесь сейчас.
               </div>
             </div>
             <span style={{ ...stepChipBase, background: 'var(--panel-strong)', color: 'var(--text-soft)', border: '1px solid var(--border)' }}>
@@ -784,13 +956,15 @@ export default function GeneratorPage() {
               padding: '0.8rem 0.95rem',
               borderRadius: '0.75rem',
               background: 'var(--panel)',
-              border: '1px solid var(--border)',
+              border: `1px solid ${Object.keys(formErrors).length > 0 ? 'var(--danger)' : 'var(--border)'}`,
               fontSize: '0.83rem',
-              color: 'var(--text-soft)',
+              color: Object.keys(formErrors).length > 0 ? 'var(--danger)' : 'var(--text-soft)',
               lineHeight: 1.55,
             }}
           >
-            {latestResultSummary}
+            {Object.keys(formErrors).length > 0
+              ? 'Исправьте ошибки в форме, чтобы перейти к генерации Helm-чарта.'
+              : latestResultSummary}
           </div>
         </div>
 
@@ -805,9 +979,6 @@ export default function GeneratorPage() {
             <div>
               <div style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text)' }}>
                 Тестовые сценарии
-              </div>
-              <div style={{ marginTop: '0.2rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                Готовые демо-кейсы можно открыть после базовой настройки формы.
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
@@ -923,9 +1094,6 @@ export default function GeneratorPage() {
               <div>
                 <div style={{ color: 'var(--workspace-muted)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   Рабочая панель
-                </div>
-                <div style={{ color: 'var(--workspace-text)', fontSize: '0.88rem', marginTop: '0.2rem' }}>
-                  Все результаты остаются здесь, без скролла по странице
                 </div>
               </div>
               <button

@@ -101,9 +101,6 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
             <div style={{ marginTop: '0.3rem', fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
               Рекомендации системы
             </div>
-            <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Короткий обзор того, насколько текущая конфигурация похожа на production-ready вариант.
-            </div>
           </div>
           <span
             style={{
@@ -231,9 +228,6 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
             <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text)' }}>
               Архитектурные рекомендации
             </span>
-          </div>
-          <div style={{ marginTop: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-            Этот блок не просто ругается, а подсказывает, насколько конфигурация похожа на production-ready вариант.
           </div>
         </div>
         {loading && (
