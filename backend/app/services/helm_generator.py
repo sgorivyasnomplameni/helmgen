@@ -1,4 +1,3 @@
-import yaml
 from jinja2 import Environment, BaseLoader
 
 CHART_YAML_TEMPLATE = """\
@@ -25,38 +24,41 @@ service:
 resources: {}
 """
 
-DEPLOYMENT_TEMPLATE = """\
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: {{ "{{" }} include "{{ name }}.fullname" . {{ "}}" }}
-  labels:
-    {{- include "{{ name }}.labels" . | nindent 4 }}
-spec:
-  replicas: {{ "{{" }} .Values.replicaCount {{ "}}" }}
-  selector:
-    matchLabels:
-      {{- include "{{ name }}.selectorLabels" . | nindent 6 }}
-  template:
-    metadata:
-      labels:
-        {{- include "{{ name }}.selectorLabels" . | nindent 8 }}
-    spec:
-      containers:
-        - name: {{ name }}
-          image: "{{ "{{" }} .Values.image.repository {{ "}}" }}:{{ "{{" }} .Values.image.tag | default .Chart.AppVersion {{ "}}" }}"
-          imagePullPolicy: {{ "{{" }} .Values.image.pullPolicy {{ "}}" }}
-          ports:
-            - name: http
-              containerPort: 80
-              protocol: TCP
-"""
-
 _env = Environment(loader=BaseLoader())
 
 
+def _render_deployment(name: str) -> str:
+    # Python f-string: {{ → {, }} → }, {{{{ → {{, }}}} → }}
+    # This produces valid Helm template syntax without Jinja2 parsing it.
+    return f"""\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{{{ include "{name}.fullname" . }}}}
+  labels:
+    {{{{- include "{name}.labels" . | nindent 4 }}}}
+spec:
+  replicas: {{{{ .Values.replicaCount }}}}
+  selector:
+    matchLabels:
+      {{{{- include "{name}.selectorLabels" . | nindent 6 }}}}
+  template:
+    metadata:
+      labels:
+        {{{{- include "{name}.selectorLabels" . | nindent 8 }}}}
+    spec:
+      containers:
+        - name: {{{{ .Chart.Name }}}}
+          image: "{{{{ .Values.image.repository }}}}:{{{{ .Values.image.tag | default .Chart.AppVersion }}}}"
+          imagePullPolicy: {{{{ .Values.image.pullPolicy }}}}
+          ports:
+            - name: http
+              containerPort: {{{{ .Values.containerPort }}}}
+              protocol: TCP
+"""
+
+
 def generate_chart(chart) -> str:
-    """Render a multi-document YAML bundle representing the Helm chart structure."""
     ctx = {
         "name": chart.name,
         "description": chart.description,
@@ -65,8 +67,8 @@ def generate_chart(chart) -> str:
     }
 
     chart_yaml = _env.from_string(CHART_YAML_TEMPLATE).render(**ctx)
-    values_yaml = chart.values_yaml or _env.from_string(VALUES_YAML_TEMPLATE).render(**ctx)
-    deployment_yaml = _env.from_string(DEPLOYMENT_TEMPLATE).render(**ctx)
+    values_yaml = chart.values_yaml or VALUES_YAML_TEMPLATE
+    deployment_yaml = _render_deployment(chart.name)
 
     return "\n---\n".join([
         f"# Chart.yaml\n{chart_yaml}",
