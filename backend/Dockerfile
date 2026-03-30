@@ -4,25 +4,9 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates tar \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r requirements.txt
-
-ARG TARGETARCH
-ARG HELM_VERSION=3.16.4
-RUN case "${TARGETARCH:-amd64}" in \
-      amd64) HELM_ARCH=amd64 ;; \
-      arm64) HELM_ARCH=arm64 ;; \
-      *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
-    esac \
-    && curl --fail --show-error --silent --location \
-      --retry 5 --retry-delay 5 --retry-all-errors \
-      "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${HELM_ARCH}.tar.gz" \
-      -o /tmp/helm.tgz \
-    && tar -xzf /tmp/helm.tgz -C /tmp \
-    && mv "/tmp/linux-${HELM_ARCH}/helm" /usr/local/bin/helm \
-    && chmod +x /usr/local/bin/helm \
-    && rm -rf /tmp/helm.tgz "/tmp/linux-${HELM_ARCH}"
 
 COPY . .
 
