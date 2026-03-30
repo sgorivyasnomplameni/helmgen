@@ -6,9 +6,13 @@ import {
   generateIngressYaml,
   generateChartYaml,
 } from '@/utils/yamlGenerator'
+import { chartsApi } from '@/api/charts'
 
 interface Props {
   config: ChartConfig
+  chartId?: number
+  chartName?: string
+  chartVersion?: string
 }
 
 const ALL_TABS: YamlTab[] = ['deployment.yaml', 'service.yaml', 'ingress.yaml', 'Chart.yaml']
@@ -28,9 +32,19 @@ function isTabDisabled(tab: YamlTab, config: ChartConfig): boolean {
   return false
 }
 
-export default function YamlPreview({ config }: Props) {
+export default function YamlPreview({ config, chartId, chartName, chartVersion }: Props) {
   const [activeTab, setActiveTab] = useState<YamlTab>('deployment.yaml')
   const [copied, setCopied] = useState(false)
+
+  const handleDownload = () => {
+    if (!chartId) return
+    const a = document.createElement('a')
+    a.href = chartsApi.downloadUrl(chartId)
+    a.download = `${chartName ?? 'chart'}-${chartVersion ?? '0.1.0'}.tgz`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
 
   useEffect(() => {
     if (isTabDisabled(activeTab, config)) {
@@ -71,6 +85,31 @@ export default function YamlPreview({ config }: Props) {
           <span style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
             Предпросмотр YAML
           </span>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {chartId && (
+            <button
+              onClick={handleDownload}
+              title={`Скачать ${chartName}-${chartVersion}.tgz`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                background: '#1e3a5f',
+                color: '#93c5fd',
+                border: '1px solid #1d4ed8',
+                borderRadius: '0.375rem',
+                padding: '0.3rem 0.7rem',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 9h-4V3H9v6H5l7 7 7-7zm-8 2V5h2v6h1.17L12 13.17 9.83 11H11zm-6 7h14v2H5v-2z" />
+              </svg>
+              Скачать .tgz
+            </button>
+          )}
           <button
             onClick={handleCopy}
             style={{
@@ -103,6 +142,7 @@ export default function YamlPreview({ config }: Props) {
               </>
             )}
           </button>
+          </div>
         </div>
 
         {/* Tabs */}

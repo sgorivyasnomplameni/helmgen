@@ -89,6 +89,7 @@ function Grid2({ children }: { children: React.ReactNode }) {
 export default function GeneratorPage() {
   const [config, setConfig] = useState<ChartConfig>(DEFAULT_CONFIG)
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [generatedChartId, setGeneratedChartId] = useState<number | null>(null)
 
   function set<K extends keyof ChartConfig>(key: K, value: ChartConfig[K]) {
     setConfig(prev => ({ ...prev, [key]: value }))
@@ -120,7 +121,22 @@ export default function GeneratorPage() {
     }))
   }
 
+  function handleDownload() {
+    if (!generatedChartId) return
+    const a = document.createElement('a')
+    a.href = chartsApi.downloadUrl(generatedChartId)
+    a.download = `${config.appName}-${config.version}.tgz`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   async function handleGenerate() {
+    // If already generated — trigger download instead of re-generating
+    if (status === 'success' && generatedChartId) {
+      handleDownload()
+      return
+    }
     if (!config.appName.trim()) {
       alert('Введите название приложения')
       return
@@ -134,8 +150,8 @@ export default function GeneratorPage() {
         app_version: config.imageTag,
       })
       await chartsApi.generate(chart.id)
+      setGeneratedChartId(chart.id)
       setStatus('success')
-      setTimeout(() => setStatus('idle'), 3000)
     } catch {
       setStatus('error')
       setTimeout(() => setStatus('idle'), 3000)
@@ -390,7 +406,7 @@ export default function GeneratorPage() {
         {/* ── Recommendations ── */}
         <RecommendationsBlock config={config} />
 
-        {/* ── Generate button ── */}
+        {/* ── Generate / Download button ── */}
         <button
           type="button"
           onClick={handleGenerate}
@@ -413,7 +429,7 @@ export default function GeneratorPage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '0.5rem',
+            gap: '0.625rem',
           }}
         >
           {status === 'loading' && (
@@ -421,8 +437,13 @@ export default function GeneratorPage() {
               <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z" />
             </svg>
           )}
-          {status === 'success' ? '✓ Чарт сохранён в базе данных' :
-           status === 'error'   ? '✗ Ошибка сохранения' :
+          {status === 'success' && (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zm-8 2V5h2v6h1.17L12 13.17 9.83 11H11zm-6 7h14v2H5v-2z" />
+            </svg>
+          )}
+          {status === 'success' ? `✓ Сгенерировано — Скачать архив` :
+           status === 'error'   ? '✗ Ошибка сохранения — попробовать снова' :
            status === 'loading' ? 'Генерация...' :
            'Сгенерировать Helm-чарт'}
         </button>
@@ -431,7 +452,12 @@ export default function GeneratorPage() {
 
       {/* ── RIGHT COLUMN ── */}
       <div style={{ position: 'sticky', top: '1.5rem' }}>
-        <YamlPreview config={config} />
+        <YamlPreview
+          config={config}
+          chartId={generatedChartId ?? undefined}
+          chartName={config.appName || 'chart'}
+          chartVersion={config.version}
+        />
       </div>
     </div>
   )

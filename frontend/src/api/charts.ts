@@ -3,6 +3,16 @@ import type { Chart, ChartCreate, ChartUpdate } from '@/types/chart'
 
 const api = axios.create({ baseURL: '/api' })
 
+export interface RecommendationParams {
+  replicas: number
+  workload_type: string
+  service_enabled: boolean
+  service_type: string
+  resource_limits: boolean
+  image_tag: string
+  ingress_enabled: boolean
+}
+
 export const chartsApi = {
   list: () => api.get<Chart[]>('/charts/').then(r => r.data),
 
@@ -18,4 +28,9 @@ export const chartsApi = {
 
   generate: (id: number, values_yaml?: string) =>
     api.post<Chart>(`/charts/${id}/generate`, { values_yaml }).then(r => r.data),
+
+  recommendations: (params: RecommendationParams) =>
+    api.get<string[]>('/charts/recommendations', { params }).then(r => r.data),
+
+  downloadUrl: (id: number) => `/api/charts/${id}/download`,
 }

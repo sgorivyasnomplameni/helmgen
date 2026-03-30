@@ -1,13 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+import io
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
 from app.models.chart import Chart
 from app.schemas.chart import ChartCreate, ChartUpdate, ChartResponse, ChartGenerateRequest
-from app.services.helm_generator import generate_chart
+from app.services.helm_generator import build_chart_archive, generate_chart
+from app.services.recommender import ChartParams, RecommendationSystem
 
 router = APIRouter()
+_recommender = RecommendationSystem()
+
+
+# Declared before /{chart_id} routes to avoid path-parameter shadowing.
+@router.get("/recommendations", response_model=list[str])
+async def get_recommendations(params: Annotated[ChartParams, Depends()]) -> list[str]:
+    return _recommender.analyze(params)
 
 
 @router.get("/", response_model=list[ChartResponse])
@@ -70,3 +83,25 @@ async def generate(
     await db.flush()
     await db.refresh(chart)
     return chart
+
+
+@router.get("/{chart_id}/download")
+async def download_chart(
+    chart_id: int,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    chart = await db.get(Chart, chart_id)
+    if not chart:
+        raise HTTPException(status_code=404, detail="Chart not found")
+    if not chart.generated_yaml:
+        raise HTTPException(status_code=400, detail="Chart not generated yet")
+
+    archive_bytes = build_chart_archive(chart)
+    filename = f"{chart.name}-{chart.chart_version}.tgz"
+
+    return StreamingResponse(
+        io.BytesIO(archive_bytes),
+        media_type="application/gzip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
