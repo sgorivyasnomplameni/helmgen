@@ -635,7 +635,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         <div
           style={{
             ...card,
-            padding: '1.1rem 1.25rem',
+            padding: '0.95rem 1.1rem',
             border: '1px solid var(--border)',
           }}
         >
@@ -685,7 +685,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
           </div>
 
           {showScenarios && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.9rem', marginTop: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginTop: '0.85rem' }}>
               {DEMO_SCENARIOS.map(scenario => {
                 const selected =
                   config.appName === scenario.config.appName &&
@@ -701,18 +701,18 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       textAlign: 'left',
                       border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
                       background: selected ? 'var(--accent-soft)' : 'var(--panel-strong)',
-                      borderRadius: '0.9rem',
-                      padding: '1rem',
+                      borderRadius: '0.8rem',
+                      padding: '0.9rem',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '0.8rem',
+                      gap: '0.65rem',
                       boxShadow: selected ? 'var(--shadow)' : 'none',
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text)' }}>{scenario.title}</div>
-                      <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>{scenario.summary}</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)' }}>{scenario.title}</div>
+                      <div style={{ marginTop: '0.25rem', fontSize: '0.77rem', lineHeight: 1.45, color: 'var(--text-muted)' }}>{scenario.summary}</div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
@@ -742,7 +742,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         <div
           style={{
             ...card,
-            padding: '1rem 1.1rem',
+            padding: '0.9rem 1rem',
             background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
           }}
         >
@@ -760,7 +760,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.75rem', width: '100%' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.6rem', width: '100%' }}>
               {progressItems.map(item => (
                 <button
                   key={item.key}
@@ -768,13 +768,13 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   onClick={item.onClick}
                   disabled={item.disabled}
                   style={{
-                    padding: '0.9rem 1rem',
-                    borderRadius: '0.95rem',
+                    padding: '0.75rem 0.85rem',
+                    borderRadius: '0.85rem',
                     border: `1px solid ${item.done ? 'var(--success)' : item.active ? 'var(--accent)' : 'var(--border)'}`,
                     background: item.active ? 'var(--panel-strong)' : 'var(--panel)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.8rem',
+                    gap: '0.65rem',
                     cursor: item.disabled ? 'not-allowed' : 'pointer',
                     opacity: item.disabled ? 0.55 : 1,
                     textAlign: 'left',
@@ -782,8 +782,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                 >
                   <span
                     style={{
-                      width: '2rem',
-                      height: '2rem',
+                      width: '1.8rem',
+                      height: '1.8rem',
                       borderRadius: '999px',
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -791,7 +791,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       background: item.done ? 'var(--success-soft)' : item.active ? 'var(--accent-soft)' : 'var(--panel-strong)',
                       color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)',
                       border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 45%, transparent)' : item.active ? 'color-mix(in srgb, var(--accent) 35%, transparent)' : 'var(--border)'}`,
-                      fontSize: '0.8rem',
+                      fontSize: '0.76rem',
                       fontWeight: 800,
                       flexShrink: 0,
                     }}
@@ -799,8 +799,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                     {item.done ? '✓' : item.key === 'config' ? '1' : item.key === 'chart' ? '2' : '3'}
                   </span>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '0.18rem', minWidth: 0 }}>
-                    <span style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text)' }}>{item.label}</span>
-                    <span style={{ fontSize: '0.76rem', color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text)' }}>{item.label}</span>
+                    <span style={{ fontSize: '0.72rem', color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)' }}>
                       {item.state}
                     </span>
                   </span>
@@ -813,10 +813,10 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         <div
           style={{
             ...card,
-            padding: '1rem 1.1rem',
+            padding: '0.95rem 1rem',
             display: 'flex',
             flexDirection: 'column',
-            gap: '0.9rem',
+            gap: '0.75rem',
             background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
           }}
         >

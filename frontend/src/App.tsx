@@ -103,21 +103,6 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => setView('history')}
-                style={{
-                  border: 'none',
-                  borderRadius: '999px',
-                  padding: '0.6rem 1rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  background: view === 'history' ? 'var(--workspace-bg)' : 'transparent',
-                  color: view === 'history' ? 'var(--workspace-text)' : 'var(--text-soft)',
-                }}
-              >
-                История
-              </button>
-              <button
-                type="button"
                 onClick={() => setView('ops')}
                 style={{
                   border: 'none',
@@ -132,6 +117,22 @@ export default function App() {
                 Проверка и deploy
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setView('history')}
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: '999px',
+                padding: '0.6rem 0.95rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: view === 'history' ? 'var(--panel-strong)' : 'transparent',
+                color: view === 'history' ? 'var(--text)' : 'var(--text-soft)',
+              }}
+            >
+              История
+            </button>
           </div>
         </div>
       </header>

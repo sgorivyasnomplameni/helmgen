@@ -76,27 +76,27 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
 
   const warningCount = recommendations.length
   const readinessLabel =
-    warningCount === 0 ? 'Ready' : warningCount <= 2 ? 'Review' : 'Risky'
+    warningCount === 0 ? 'Готово' : warningCount <= 2 ? 'Проверить' : 'Риски'
   const readinessColor =
     warningCount === 0 ? 'var(--success)' : warningCount <= 2 ? 'var(--text-soft)' : 'var(--warning)'
   const readinessBackground =
-    warningCount === 0 ? 'var(--success-soft)' : warningCount <= 2 ? 'var(--panel-contrast)' : 'var(--warning-soft)'
+    warningCount === 0 ? 'var(--success-soft)' : warningCount <= 2 ? 'var(--panel-strong)' : 'color-mix(in srgb, var(--warning-soft) 65%, var(--panel) 35%)'
 
   if (variant === 'sidebar') {
     return (
       <div
         style={{
-          background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
+          background: 'linear-gradient(180deg, color-mix(in srgb, var(--panel) 88%, transparent) 0%, var(--panel-muted) 100%)',
           border: '1px solid var(--border)',
           borderRadius: '1rem',
-          padding: '1.15rem',
+          padding: '1rem',
           boxShadow: 'var(--shadow)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1rem' }}>
           <div>
-            <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--warning)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              Architecture Audit
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Аудит
             </div>
             <div style={{ marginTop: '0.3rem', fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
               Рекомендации системы
@@ -124,7 +124,7 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
             }}
           >
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Warnings
+              Замечаний
             </div>
             <div style={{ marginTop: '0.35rem', fontSize: '1.45rem', fontWeight: 800, color: 'var(--text)' }}>
               {warningCount}
@@ -139,7 +139,7 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
             }}
           >
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: readinessColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Readiness
+              Статус
             </div>
             <div style={{ marginTop: '0.35rem', fontSize: '1.05rem', fontWeight: 800, color: readinessColor }}>
               {readinessLabel}
@@ -149,7 +149,7 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
 
         <div
           style={{
-            minHeight: '360px',
+            minHeight: '280px',
             display: 'grid',
             gap: '0.65rem',
             alignContent: 'start',
@@ -161,22 +161,22 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: '0.6rem',
-                padding: '0.85rem',
+                padding: '0.8rem',
                 borderRadius: '0.85rem',
                 background: 'var(--success-soft)',
                 border: '1px solid var(--border)',
               }}
             >
               <CheckIcon />
-              <div>
-                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--success)' }}>
-                  Конфигурация выглядит хорошо
-                </div>
-                <div style={{ marginTop: '0.18rem', fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  Критичных архитектурных замечаний по текущим параметрам не найдено.
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--success)' }}>
+                    Критичных замечаний нет
+                  </div>
+                  <div style={{ marginTop: '0.18rem', fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    Можно продолжать работу с chart.
+                  </div>
                 </div>
               </div>
-            </div>
           ) : (
             recommendations.slice(0, 4).map((rec, i) => (
               <div
@@ -185,17 +185,17 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '0.65rem',
-                  padding: '0.85rem',
+                  padding: '0.8rem',
                   borderRadius: '0.85rem',
                   background: 'var(--panel-strong)',
                   border: '1px solid var(--border)',
-                  boxShadow: 'inset 3px 0 0 var(--warning)',
+                  boxShadow: 'inset 2px 0 0 color-mix(in srgb, var(--warning) 80%, transparent)',
                 }}
               >
                 <WarningIcon />
                 <div>
-                  <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--warning)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    {i === 0 ? 'Primary risk' : `Note ${i + 1}`}
+                  <div style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--warning)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {i === 0 ? 'Главное' : `Замечание ${i + 1}`}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-soft)', lineHeight: 1.5 }}>
                     {rec}

@@ -178,68 +178,84 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
         <h1 style={{ margin: 0, fontSize: '1.7rem', fontWeight: 800, color: 'var(--text)' }}>
           Проверка и deploy
         </h1>
+        {chart && (
+          <div style={{ marginTop: '0.45rem', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
+            {chart.name} · Chart {chart.chart_version} · App {chart.app_version}
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          ...card,
+          padding: '1rem 1.15rem',
+          marginBottom: '1.25rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '1rem',
+          flexWrap: 'wrap',
+          background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Текущий chart
+          </div>
+          <div style={{ marginTop: '0.28rem', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>
+            {chart?.name ?? 'Не выбран'}
+          </div>
+          {chart && (
+            <div style={{ marginTop: '0.28rem', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+              Chart {chart.chart_version} · App {chart.app_version}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => void handleTemplate()}
+            disabled={isTemplating}
+            style={{
+              ...actionButton,
+              border: 'none',
+              background: 'var(--accent)',
+              color: 'white',
+            }}
+          >
+            {isTemplating ? 'Рендер...' : 'Рендер'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDryRunDeploy()}
+            disabled={isDryRunning}
+            style={{
+              ...actionButton,
+              border: '1px solid var(--border)',
+              background: 'var(--panel-strong)',
+              color: 'var(--text-soft)',
+            }}
+          >
+            {isDryRunning ? 'Dry-run...' : 'Dry-run'}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            style={{
+              ...actionButton,
+              border: '1px solid color-mix(in srgb, var(--success) 35%, transparent)',
+              background: 'var(--success-soft)',
+              color: 'var(--success)',
+            }}
+          >
+            Скачать .tgz
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr)', gap: '1.25rem', alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ ...card, padding: '1.15rem' }}>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Выбранный chart
-            </div>
-            {loadingChart ? (
-              <div style={{ marginTop: '0.8rem', color: 'var(--text-muted)' }}>Загружаем...</div>
-            ) : chartError ? (
-              <div style={{ marginTop: '0.8rem', color: 'var(--danger)' }}>{chartError}</div>
-            ) : chart ? (
-              <>
-                <div style={{ marginTop: '0.55rem', fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)' }}>{chart.name}</div>
-                <div style={{ marginTop: '0.45rem', color: 'var(--text-soft)', fontSize: '0.88rem' }}>
-                  Chart {chart.chart_version} · App {chart.app_version}
-                </div>
-                <div style={{ marginTop: '0.9rem', display: 'grid', gap: '0.55rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => void handleTemplate()}
-                    disabled={isTemplating}
-                    style={{
-                      ...actionButton,
-                      border: 'none',
-                      background: 'var(--accent)',
-                      color: 'white',
-                    }}
-                  >
-                    {isTemplating ? 'Рендер...' : 'Рендер'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDryRunDeploy()}
-                    disabled={isDryRunning}
-                    style={{
-                      ...actionButton,
-                      border: '1px solid var(--border)',
-                      background: 'var(--panel-strong)',
-                      color: 'var(--text-soft)',
-                    }}
-                  >
-                    {isDryRunning ? 'Dry-run...' : 'Dry-run'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDownload}
-                    style={{
-                      ...actionButton,
-                      border: '1px solid color-mix(in srgb, var(--success) 35%, transparent)',
-                      background: 'var(--success-soft)',
-                      color: 'var(--success)',
-                    }}
-                  >
-                    Скачать .tgz
-                  </button>
-                </div>
-              </>
-            ) : null}
-          </div>
-
           <div style={{ ...card, padding: '1.15rem' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)' }}>
               Статус
@@ -251,6 +267,16 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               <div style={{ color: dryRunResult?.success ? 'var(--success)' : dryRunResult ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 700 }}>
                 Dry-run: {dryRunResult?.success ? 'успешен' : dryRunResult ? 'требует внимания' : 'не запускался'}
               </div>
+              {chartError && (
+                <div style={{ color: 'var(--danger)', fontWeight: 700 }}>
+                  {chartError}
+                </div>
+              )}
+              {loadingChart && (
+                <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>
+                  Загружаем данные chart...
+                </div>
+              )}
             </div>
           </div>
         </div>

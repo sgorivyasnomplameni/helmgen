@@ -92,7 +92,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
           История чартов
         </h1>
         <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-          Здесь собраны все сохранённые генерации HelmGen с быстрым скачиванием и очисткой.
+          Архив ранее собранных chart с быстрым скачиванием и переходом к проверке.
         </p>
       </div>
 
