@@ -15,7 +15,10 @@ RUN case "${TARGETARCH:-amd64}" in \
       arm64) HELM_ARCH=arm64 ;; \
       *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
     esac \
-    && curl -fsSL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${HELM_ARCH}.tar.gz" -o /tmp/helm.tgz \
+    && curl --fail --show-error --silent --location \
+      --retry 5 --retry-delay 5 --retry-all-errors \
+      "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${HELM_ARCH}.tar.gz" \
+      -o /tmp/helm.tgz \
     && tar -xzf /tmp/helm.tgz -C /tmp \
     && mv "/tmp/linux-${HELM_ARCH}/helm" /usr/local/bin/helm \
     && chmod +x /usr/local/bin/helm \
