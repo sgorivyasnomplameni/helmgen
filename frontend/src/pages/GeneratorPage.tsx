@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import type { ChartConfig, WorkloadType, ServiceType } from '@/types/generator'
+import { useState } from 'react'
+import type { ChartConfig, WorkloadType, ServiceType, YamlTab } from '@/types/generator'
 import WorkloadCard from '@/components/WorkloadCard'
 import ToggleSwitch from '@/components/ToggleSwitch'
-import YamlPreview from '@/components/YamlPreview'
 import RecommendationsBlock from '@/components/RecommendationsBlock'
 import {
   chartsApi,
@@ -10,7 +9,13 @@ import {
   type ChartTemplateResult,
   type ChartValidationResult,
 } from '@/api/charts'
-import { generateValuesYaml } from '@/utils/yamlGenerator'
+import {
+  generateChartYaml,
+  generateDeploymentYaml,
+  generateIngressYaml,
+  generateServiceYaml,
+  generateValuesYaml,
+} from '@/utils/yamlGenerator'
 
 const DEFAULT_CONFIG: ChartConfig = {
   appName: '',
@@ -31,6 +36,9 @@ const DEFAULT_CONFIG: ChartConfig = {
 
 const WORKLOAD_TYPES: WorkloadType[] = ['Deployment', 'StatefulSet', 'DaemonSet']
 const SERVICE_TYPES: ServiceType[] = ['ClusterIP', 'NodePort', 'LoadBalancer']
+const PREVIEW_TABS: YamlTab[] = ['deployment.yaml', 'service.yaml', 'ingress.yaml', 'Chart.yaml']
+
+type WorkspaceSection = 'preview' | 'lint' | 'template' | 'dry-run'
 
 interface DemoScenario {
   id: string
@@ -219,10 +227,29 @@ const stepChipBase: React.CSSProperties = {
 function summarizeDryRunError(errors: string[]): string | null {
   const clusterError = errors.find(error => error.includes('Kubernetes cluster unreachable'))
   if (clusterError) {
-    return 'Kubernetes-кластер сейчас недоступен. Dry-run deploy требует активного kube-context.'
+    return 'Kubernetes-кластер недоступен. Dry-run deploy требует активного kube-context.'
   }
 
   return errors[0] ?? null
+}
+
+function getPreviewContent(tab: YamlTab, config: ChartConfig): string {
+  switch (tab) {
+    case 'deployment.yaml':
+      return generateDeploymentYaml(config)
+    case 'service.yaml':
+      return generateServiceYaml(config)
+    case 'ingress.yaml':
+      return generateIngressYaml(config)
+    case 'Chart.yaml':
+      return generateChartYaml(config)
+  }
+}
+
+function isPreviewTabDisabled(tab: YamlTab, config: ChartConfig): boolean {
+  if (tab === 'service.yaml') return !config.service.enabled
+  if (tab === 'ingress.yaml') return !config.ingress.enabled
+  return false
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -252,27 +279,8 @@ export default function GeneratorPage() {
   const [isTemplating, setIsTemplating] = useState(false)
   const [dryRunResult, setDryRunResult] = useState<ChartDryRunResult | null>(null)
   const [isDryRunning, setIsDryRunning] = useState(false)
-  const validationRef = useRef<HTMLDivElement | null>(null)
-  const templateRef = useRef<HTMLDivElement | null>(null)
-  const dryRunRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (validation) {
-      validationRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [validation])
-
-  useEffect(() => {
-    if (templateResult) {
-      templateRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [templateResult])
-
-  useEffect(() => {
-    if (dryRunResult) {
-      dryRunRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [dryRunResult])
+  const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('preview')
+  const [previewTab, setPreviewTab] = useState<YamlTab>('deployment.yaml')
 
   function resetGenerationState() {
     setStatus('idle')
@@ -280,6 +288,7 @@ export default function GeneratorPage() {
     setValidation(null)
     setTemplateResult(null)
     setDryRunResult(null)
+    setWorkspaceSection('preview')
   }
 
   function set<K extends keyof ChartConfig>(key: K, value: ChartConfig[K]) {
@@ -302,11 +311,7 @@ export default function GeneratorPage() {
     setConfig(prev => ({ ...prev, resources: { ...prev.resources, [k]: v } }))
   }
 
-  function setResourcesNested(
-    group: 'requests' | 'limits',
-    key: 'cpu' | 'memory',
-    value: string
-  ) {
+  function setResourcesNested(group: 'requests' | 'limits', key: 'cpu' | 'memory', value: string) {
     resetGenerationState()
     setConfig(prev => ({
       ...prev,
@@ -337,10 +342,13 @@ export default function GeneratorPage() {
       alert('Введите название приложения')
       return
     }
+
     setStatus('loading')
     setValidation(null)
     setTemplateResult(null)
     setDryRunResult(null)
+    setWorkspaceSection('preview')
+
     try {
       const payload = {
         name: config.appName,
@@ -364,6 +372,7 @@ export default function GeneratorPage() {
   async function handleValidate() {
     if (!generatedChartId) return
     setIsValidating(true)
+    setWorkspaceSection('lint')
     try {
       const result = await chartsApi.validate(generatedChartId)
       setValidation(result)
@@ -384,6 +393,7 @@ export default function GeneratorPage() {
   async function handleTemplate() {
     if (!generatedChartId) return
     setIsTemplating(true)
+    setWorkspaceSection('template')
     try {
       const result = await chartsApi.template(generatedChartId)
       setTemplateResult(result)
@@ -404,6 +414,7 @@ export default function GeneratorPage() {
   async function handleDryRunDeploy() {
     if (!generatedChartId) return
     setIsDryRunning(true)
+    setWorkspaceSection('dry-run')
     try {
       const result = await chartsApi.dryRunDeploy(generatedChartId)
       setDryRunResult(result)
@@ -421,11 +432,23 @@ export default function GeneratorPage() {
     }
   }
 
+  const latestResultSummary = dryRunResult
+    ? summarizeDryRunError(dryRunResult.errors) ?? dryRunResult.summary
+    : templateResult
+      ? templateResult.summary
+      : validation
+        ? validation.summary
+        : generatedChartId
+          ? 'Chart готов к следующим шагам проверки и подготовки к развёртыванию.'
+          : 'Результаты операций будут появляться во вкладках справа, без автоскролла по странице.'
+
+  const previewContent = getPreviewContent(previewTab, config)
+
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 480px',
+        gridTemplateColumns: 'minmax(0, 1fr) 460px',
         gap: '1.5rem',
         alignItems: 'start',
         padding: '1.5rem',
@@ -433,10 +456,7 @@ export default function GeneratorPage() {
         margin: '0 auto',
       }}
     >
-      {/* ── LEFT COLUMN ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-
-        {/* Header */}
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
             Генератор Helm-чартов
@@ -449,11 +469,8 @@ export default function GeneratorPage() {
         <div
           style={{
             ...card,
-            position: 'sticky',
-            top: '5.75rem',
-            zIndex: 10,
-            boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
             border: '1px solid #dbeafe',
+            boxShadow: '0 12px 30px rgba(15, 23, 42, 0.06)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
@@ -462,131 +479,73 @@ export default function GeneratorPage() {
                 Рабочий пайплайн
               </div>
               <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
-                Состояние сохраняется при переходе в историю. После каждого шага экран автоматически прокрутится к новому результату.
+                Последовательный сценарий: generate, lint, template, dry-run. При переходе в историю состояние формы не теряется.
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <span
-                style={{
-                  ...stepChipBase,
-                  background: generatedChartId ? '#dbeafe' : '#e2e8f0',
-                  color: generatedChartId ? '#1d4ed8' : '#64748b',
-                }}
-              >
-                1. Generate
-              </span>
-              <span
-                style={{
-                  ...stepChipBase,
-                  background: validation?.valid ? '#dcfce7' : validation ? '#fee2e2' : '#e2e8f0',
-                  color: validation?.valid ? '#166534' : validation ? '#b91c1c' : '#64748b',
-                }}
-              >
-                2. Lint
-              </span>
-              <span
-                style={{
-                  ...stepChipBase,
-                  background: templateResult?.success ? '#dbeafe' : templateResult ? '#fee2e2' : '#e2e8f0',
-                  color: templateResult?.success ? '#1d4ed8' : templateResult ? '#b91c1c' : '#64748b',
-                }}
-              >
-                3. Template
-              </span>
-              <span
-                style={{
-                  ...stepChipBase,
-                  background: dryRunResult?.success ? '#ede9fe' : dryRunResult ? '#fee2e2' : '#e2e8f0',
-                  color: dryRunResult?.success ? '#6d28d9' : dryRunResult ? '#b91c1c' : '#64748b',
-                }}
-              >
-                4. Dry-Run
-              </span>
+              <span style={{ ...stepChipBase, background: generatedChartId ? '#dbeafe' : '#e2e8f0', color: generatedChartId ? '#1d4ed8' : '#64748b' }}>1. Generate</span>
+              <span style={{ ...stepChipBase, background: validation?.valid ? '#dcfce7' : validation ? '#fee2e2' : '#e2e8f0', color: validation?.valid ? '#166534' : validation ? '#b91c1c' : '#64748b' }}>2. Lint</span>
+              <span style={{ ...stepChipBase, background: templateResult?.success ? '#dbeafe' : templateResult ? '#fee2e2' : '#e2e8f0', color: templateResult?.success ? '#1d4ed8' : templateResult ? '#b91c1c' : '#64748b' }}>3. Template</span>
+              <span style={{ ...stepChipBase, background: dryRunResult?.success ? '#ede9fe' : dryRunResult ? '#fee2e2' : '#e2e8f0', color: dryRunResult?.success ? '#6d28d9' : dryRunResult ? '#b91c1c' : '#64748b' }}>4. Dry-Run</span>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '0.75rem' }}>
             <button
               type="button"
               onClick={handleGenerate}
               disabled={status === 'loading'}
-              style={{
-                ...primaryButton,
-                background: status === 'error' ? '#dc2626' : '#2563eb',
-                color: 'white',
-                cursor: status === 'loading' ? 'not-allowed' : 'pointer',
-                opacity: status === 'loading' ? 0.75 : 1,
-              }}
+              style={{ ...primaryButton, background: status === 'error' ? '#dc2626' : '#2563eb', color: 'white', cursor: status === 'loading' ? 'not-allowed' : 'pointer', opacity: status === 'loading' ? 0.75 : 1 }}
             >
               {status === 'loading' ? 'Генерация...' : 'Сгенерировать'}
             </button>
-
             <button
               type="button"
               onClick={() => void handleValidate()}
               disabled={!generatedChartId || isValidating || status === 'loading'}
-              style={{
-                ...primaryButton,
-                background: validation?.valid ? '#16a34a' : '#f59e0b',
-                color: 'white',
-                cursor: !generatedChartId || isValidating || status === 'loading' ? 'not-allowed' : 'pointer',
-                opacity: !generatedChartId || isValidating || status === 'loading' ? 0.55 : 1,
-              }}
+              style={{ ...primaryButton, background: validation?.valid ? '#16a34a' : '#f59e0b', color: 'white', cursor: !generatedChartId || isValidating || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isValidating || status === 'loading' ? 0.55 : 1 }}
             >
-              {isValidating ? 'Проверка...' : 'Проверить chart'}
+              {isValidating ? 'Проверка...' : 'Lint'}
             </button>
-
             <button
               type="button"
               onClick={() => void handleTemplate()}
               disabled={!generatedChartId || isTemplating || status === 'loading'}
-              style={{
-                ...primaryButton,
-                background: templateResult?.success ? '#0f766e' : '#0ea5e9',
-                color: 'white',
-                cursor: !generatedChartId || isTemplating || status === 'loading' ? 'not-allowed' : 'pointer',
-                opacity: !generatedChartId || isTemplating || status === 'loading' ? 0.55 : 1,
-              }}
+              style={{ ...primaryButton, background: templateResult?.success ? '#0f766e' : '#0ea5e9', color: 'white', cursor: !generatedChartId || isTemplating || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isTemplating || status === 'loading' ? 0.55 : 1 }}
             >
-              {isTemplating ? 'Рендер...' : 'Рендер манифестов'}
+              {isTemplating ? 'Рендер...' : 'Template'}
             </button>
-
             <button
               type="button"
               onClick={() => void handleDryRunDeploy()}
               disabled={!generatedChartId || isDryRunning || status === 'loading'}
-              style={{
-                ...primaryButton,
-                background: dryRunResult?.success ? '#7c3aed' : '#8b5cf6',
-                color: 'white',
-                cursor: !generatedChartId || isDryRunning || status === 'loading' ? 'not-allowed' : 'pointer',
-                opacity: !generatedChartId || isDryRunning || status === 'loading' ? 0.55 : 1,
-              }}
+              style={{ ...primaryButton, background: dryRunResult?.success ? '#7c3aed' : '#8b5cf6', color: 'white', cursor: !generatedChartId || isDryRunning || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isDryRunning || status === 'loading' ? 0.55 : 1 }}
             >
-              {isDryRunning ? 'Dry-run...' : 'Dry-run deploy'}
+              {isDryRunning ? 'Dry-run...' : 'Dry-run'}
             </button>
-
             <button
               type="button"
               onClick={handleDownload}
               disabled={!generatedChartId}
-              style={{
-                ...primaryButton,
-                background: '#16a34a',
-                color: 'white',
-                cursor: !generatedChartId ? 'not-allowed' : 'pointer',
-                opacity: !generatedChartId ? 0.55 : 1,
-              }}
+              style={{ ...primaryButton, background: '#16a34a', color: 'white', cursor: !generatedChartId ? 'not-allowed' : 'pointer', opacity: !generatedChartId ? 0.55 : 1 }}
             >
-              Скачать архив
+              Скачать
             </button>
           </div>
 
-          <div style={{ marginTop: '0.85rem', fontSize: '0.84rem', color: '#64748b' }}>
-            {status === 'success' && 'Чарт успешно сгенерирован. Дальше можно последовательно пройти lint, template и dry-run deploy.'}
-            {status === 'loading' && 'Идёт генерация Helm-чарта...'}
-            {status === 'error' && 'Во время генерации возникла ошибка. Попробуйте снова.'}
-            {status === 'idle' && 'Сначала сгенерируйте чарт, затем пройдите шаги проверки и подготовки к развёртыванию.'}
+          <div
+            style={{
+              marginTop: '0.95rem',
+              padding: '0.85rem 1rem',
+              borderRadius: '0.8rem',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              fontSize: '0.84rem',
+              color: '#475569',
+              lineHeight: 1.55,
+            }}
+          >
+            {latestResultSummary}
           </div>
         </div>
 
@@ -601,7 +560,7 @@ export default function GeneratorPage() {
             <div>
               <p style={{ ...sectionTitle, marginBottom: '0.35rem' }}>Тестовые сценарии</p>
               <p style={{ margin: 0, fontSize: '0.86rem', color: '#7c2d12', lineHeight: 1.55 }}>
-                Выберите готовый демо-кейс, чтобы мгновенно заполнить форму, посмотреть YAML и увидеть реакцию рекомендательной системы.
+                Выберите готовый демо-кейс, чтобы мгновенно заполнить форму и посмотреть результат справа.
               </p>
             </div>
             <button
@@ -628,9 +587,10 @@ export default function GeneratorPage() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.9rem' }}>
             {DEMO_SCENARIOS.map(scenario => {
-              const selected = config.appName === scenario.config.appName
-                && config.workloadType === scenario.config.workloadType
-                && config.imageTag === scenario.config.imageTag
+              const selected =
+                config.appName === scenario.config.appName &&
+                config.workloadType === scenario.config.workloadType &&
+                config.imageTag === scenario.config.imageTag
 
               return (
                 <button
@@ -647,17 +607,12 @@ export default function GeneratorPage() {
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.8rem',
-                    transition: 'transform 0.15s, box-shadow 0.15s',
                     boxShadow: selected ? '0 10px 24px rgba(249, 115, 22, 0.12)' : 'none',
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#7c2d12' }}>
-                      {scenario.title}
-                    </div>
-                    <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', lineHeight: 1.5, color: '#9a3412' }}>
-                      {scenario.summary}
-                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#7c2d12' }}>{scenario.title}</div>
+                    <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', lineHeight: 1.5, color: '#9a3412' }}>{scenario.summary}</div>
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
@@ -677,384 +632,29 @@ export default function GeneratorPage() {
                       </span>
                     ))}
                   </div>
-
-                  <div style={{ fontSize: '0.76rem', color: '#78716c' }}>
-                    {scenario.config.appName}:{' '}
-                    {scenario.config.imageTag}
-                  </div>
                 </button>
               )
             })}
           </div>
         </div>
 
-        {/* ── Recommendations ── */}
-        <RecommendationsBlock config={config} />
-
-        {validation && (
-          <div
-            ref={validationRef}
-            style={{
-              ...card,
-              border: `1px solid ${validation.valid ? '#bbf7d0' : '#fecaca'}`,
-              background: validation.valid ? '#f0fdf4' : '#fff7ed',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
-              <div>
-                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-                  Результат проверки
-                </div>
-                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
-                  {validation.summary || 'Проверка структуры и параметров Helm-чарта'}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: '#e2e8f0',
-                    color: '#334155',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {validation.engine === 'helm_lint' ? 'helm lint' : 'builtin'}
-                </span>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: validation.valid ? '#dcfce7' : '#fee2e2',
-                    color: validation.valid ? '#166534' : '#b91c1c',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                  }}
-                >
-                  {validation.valid ? 'VALID' : 'INVALID'}
-                </span>
-              </div>
-            </div>
-
-            {validation.errors.length > 0 && (
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Ошибки
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
-                  {validation.errors.map(item => (
-                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {validation.warnings.length > 0 && (
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Предупреждения
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
-                  {validation.warnings.map(item => (
-                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#166534', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Успешные проверки
-              </div>
-              <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#166534' }}>
-                {validation.checks.map(item => (
-                  <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {templateResult && (
-          <div
-            ref={templateRef}
-            style={{
-              ...card,
-              border: `1px solid ${templateResult.success ? '#bfdbfe' : '#fecaca'}`,
-              background: templateResult.success ? '#eff6ff' : '#fff7ed',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
-              <div>
-                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-                  Helm Template
-                </div>
-                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
-                  {templateResult.summary || 'Итоговые Kubernetes-манифесты после рендера Helm chart'}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: '#dbeafe',
-                    color: '#1d4ed8',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {templateResult.engine.replace('_', ' ')}
-                </span>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: templateResult.success ? '#dcfce7' : '#fee2e2',
-                    color: templateResult.success ? '#166534' : '#b91c1c',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                  }}
-                >
-                  {templateResult.success ? 'RENDERED' : 'FAILED'}
-                </span>
-              </div>
-            </div>
-
-            {templateResult.errors.length > 0 && (
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Ошибки рендера
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
-                  {templateResult.errors.map(item => (
-                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {templateResult.warnings.length > 0 && (
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Предупреждения
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
-                  {templateResult.warnings.map(item => (
-                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#1d4ed8', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Результат helm template
-              </div>
-              <div
-                style={{
-                  background: '#0f172a',
-                  borderRadius: '0.85rem',
-                  padding: '1rem',
-                  maxHeight: '420px',
-                  overflow: 'auto',
-                }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    color: '#dbeafe',
-                    fontSize: '0.78rem',
-                    lineHeight: 1.6,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                  }}
-                >
-                  {templateResult.rendered_manifests || '# Helm template не вернул манифесты'}
-                </pre>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {dryRunResult && (
-          <div
-            ref={dryRunRef}
-            style={{
-              ...card,
-              border: `1px solid ${dryRunResult.success ? '#ddd6fe' : '#fecaca'}`,
-              background: dryRunResult.success ? '#f5f3ff' : '#fff7ed',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
-              <div>
-                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-                  Dry-Run Deploy
-                </div>
-                <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
-                  {dryRunResult.summary || 'Проверка сценария развёртывания без применения в кластер'}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: '#ede9fe',
-                    color: '#6d28d9',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {dryRunResult.engine.replace('_', ' ')}
-                </span>
-                <span
-                  style={{
-                    padding: '0.4rem 0.7rem',
-                    borderRadius: '999px',
-                    background: dryRunResult.success ? '#dcfce7' : '#fee2e2',
-                    color: dryRunResult.success ? '#166534' : '#b91c1c',
-                    fontWeight: 800,
-                    fontSize: '0.76rem',
-                  }}
-                >
-                  {dryRunResult.success ? 'READY' : 'FAILED'}
-                </span>
-              </div>
-            </div>
-
-            {summarizeDryRunError(dryRunResult.errors) && (
-              <div
-                style={{
-                  marginBottom: '0.85rem',
-                  padding: '0.85rem 1rem',
-                  borderRadius: '0.8rem',
-                  background: '#fff',
-                  border: '1px solid #fed7aa',
-                  color: '#9a3412',
-                  fontSize: '0.86rem',
-                  lineHeight: 1.55,
-                }}
-              >
-                {summarizeDryRunError(dryRunResult.errors)}
-              </div>
-            )}
-
-            {dryRunResult.warnings.length > 0 && (
-              <div style={{ marginBottom: '0.85rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b45309', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Предупреждения
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#92400e' }}>
-                  {dryRunResult.warnings.map(item => (
-                    <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <details>
-              <summary
-                style={{
-                  cursor: 'pointer',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  color: '#6d28d9',
-                  marginBottom: '0.85rem',
-                }}
-              >
-                Показать технические детали dry-run
-              </summary>
-              <div style={{ marginTop: '0.75rem' }}>
-                {dryRunResult.errors.length > 0 && (
-                  <div style={{ marginBottom: '0.85rem' }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#b91c1c', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Технические ошибки
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#7f1d1d' }}>
-                      {dryRunResult.errors.map(item => (
-                        <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#6d28d9', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Вывод dry-run deploy
-                  </div>
-                  <div
-                    style={{
-                      background: '#1e1b4b',
-                      borderRadius: '0.85rem',
-                      padding: '1rem',
-                      maxHeight: '420px',
-                      overflow: 'auto',
-                    }}
-                  >
-                    <pre
-                      style={{
-                        margin: 0,
-                        color: '#e9d5ff',
-                        fontSize: '0.78rem',
-                        lineHeight: 1.6,
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                      }}
-                    >
-                      {dryRunResult.output || '# Dry-run deploy не вернул вывод'}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            </details>
-          </div>
-        )}
-
-        {/* ── Basic params ── */}
         <div style={card}>
           <p style={sectionTitle}>Основные параметры</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <Grid2>
               <Field label="Название приложения">
-                <input
-                  style={input}
-                  placeholder="myapp"
-                  value={config.appName}
-                  onChange={e => set('appName', e.target.value)}
-                />
+                <input style={input} placeholder="myapp" value={config.appName} onChange={e => set('appName', e.target.value)} />
               </Field>
               <Field label="Версия чарта">
-                <input
-                  style={input}
-                  placeholder="0.1.0"
-                  value={config.version}
-                  onChange={e => set('version', e.target.value)}
-                />
+                <input style={input} placeholder="0.1.0" value={config.version} onChange={e => set('version', e.target.value)} />
               </Field>
             </Grid2>
             <Grid2>
               <Field label="Docker образ">
-                <input
-                  style={input}
-                  placeholder="nginx"
-                  value={config.image}
-                  onChange={e => set('image', e.target.value)}
-                />
+                <input style={input} placeholder="nginx" value={config.image} onChange={e => set('image', e.target.value)} />
               </Field>
               <Field label="Тег образа">
-                <input
-                  style={input}
-                  placeholder="latest"
-                  value={config.imageTag}
-                  onChange={e => set('imageTag', e.target.value)}
-                />
+                <input style={input} placeholder="latest" value={config.imageTag} onChange={e => set('imageTag', e.target.value)} />
               </Field>
             </Grid2>
             <Grid2>
@@ -1069,54 +669,30 @@ export default function GeneratorPage() {
                 />
               </Field>
               <Field label="Порт контейнера">
-                <input
-                  style={input}
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={config.containerPort}
-                  onChange={e => set('containerPort', Number(e.target.value))}
-                />
+                <input style={input} type="number" min={1} max={65535} value={config.containerPort} onChange={e => set('containerPort', Number(e.target.value))} />
               </Field>
             </Grid2>
           </div>
         </div>
 
-        {/* ── Workload type ── */}
         <div style={card}>
           <p style={sectionTitle}>Тип Workload</p>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             {WORKLOAD_TYPES.map(type => (
-              <WorkloadCard
-                key={type}
-                type={type}
-                selected={config.workloadType === type}
-                onSelect={() => set('workloadType', type)}
-              />
+              <WorkloadCard key={type} type={type} selected={config.workloadType === type} onSelect={() => set('workloadType', type)} />
             ))}
           </div>
         </div>
 
-        {/* ── Network ── */}
         <div style={card}>
           <p style={sectionTitle}>Сетевые ресурсы</p>
 
-          {/* Service */}
           <div>
-            <ToggleSwitch
-              checked={config.service.enabled}
-              onChange={v => setService('enabled', v)}
-              label="Service"
-            />
+            <ToggleSwitch checked={config.service.enabled} onChange={v => setService('enabled', v)} label="Service" />
             {config.service.enabled && (
               <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
                 <Field label="Порт">
-                  <input
-                    style={{ ...input, width: '120px' }}
-                    type="number"
-                    value={config.service.port}
-                    onChange={e => setService('port', Number(e.target.value))}
-                  />
+                  <input style={{ ...input, width: '120px' }} type="number" value={config.service.port} onChange={e => setService('port', Number(e.target.value))} />
                 </Field>
                 <div style={{ flex: 1 }}>
                   <label style={fieldLabel}>Тип Service</label>
@@ -1136,7 +712,6 @@ export default function GeneratorPage() {
                           fontWeight: 600,
                           fontSize: '0.78rem',
                           cursor: 'pointer',
-                          transition: 'all 0.15s',
                         }}
                       >
                         {t}
@@ -1150,31 +725,16 @@ export default function GeneratorPage() {
 
           <hr style={divider} />
 
-          {/* Ingress */}
           <div>
-            <ToggleSwitch
-              checked={config.ingress.enabled}
-              onChange={v => setIngress('enabled', v)}
-              label="Ingress"
-            />
+            <ToggleSwitch checked={config.ingress.enabled} onChange={v => setIngress('enabled', v)} label="Ingress" />
             {config.ingress.enabled && (
               <div style={{ marginTop: '1rem' }}>
                 <Grid2>
                   <Field label="Хост">
-                    <input
-                      style={input}
-                      placeholder="myapp.example.com"
-                      value={config.ingress.host}
-                      onChange={e => setIngress('host', e.target.value)}
-                    />
+                    <input style={input} placeholder="myapp.example.com" value={config.ingress.host} onChange={e => setIngress('host', e.target.value)} />
                   </Field>
                   <Field label="Путь">
-                    <input
-                      style={input}
-                      placeholder="/"
-                      value={config.ingress.path}
-                      onChange={e => setIngress('path', e.target.value)}
-                    />
+                    <input style={input} placeholder="/" value={config.ingress.path} onChange={e => setIngress('path', e.target.value)} />
                   </Field>
                 </Grid2>
               </div>
@@ -1182,33 +742,18 @@ export default function GeneratorPage() {
           </div>
         </div>
 
-        {/* ── Resource limits ── */}
         <div style={card}>
-          <ToggleSwitch
-            checked={config.resources.enabled}
-            onChange={v => setResources('enabled', v)}
-            label="Resource Limits"
-          />
+          <ToggleSwitch checked={config.resources.enabled} onChange={v => setResources('enabled', v)} label="Resource Limits" />
           {config.resources.enabled && (
             <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>REQUESTS</p>
                 <Grid2>
                   <Field label="CPU">
-                    <input
-                      style={input}
-                      placeholder="100m"
-                      value={config.resources.requests.cpu}
-                      onChange={e => setResourcesNested('requests', 'cpu', e.target.value)}
-                    />
+                    <input style={input} placeholder="100m" value={config.resources.requests.cpu} onChange={e => setResourcesNested('requests', 'cpu', e.target.value)} />
                   </Field>
                   <Field label="Memory">
-                    <input
-                      style={input}
-                      placeholder="128Mi"
-                      value={config.resources.requests.memory}
-                      onChange={e => setResourcesNested('requests', 'memory', e.target.value)}
-                    />
+                    <input style={input} placeholder="128Mi" value={config.resources.requests.memory} onChange={e => setResourcesNested('requests', 'memory', e.target.value)} />
                   </Field>
                 </Grid2>
               </div>
@@ -1216,20 +761,10 @@ export default function GeneratorPage() {
                 <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>LIMITS</p>
                 <Grid2>
                   <Field label="CPU">
-                    <input
-                      style={input}
-                      placeholder="500m"
-                      value={config.resources.limits.cpu}
-                      onChange={e => setResourcesNested('limits', 'cpu', e.target.value)}
-                    />
+                    <input style={input} placeholder="500m" value={config.resources.limits.cpu} onChange={e => setResourcesNested('limits', 'cpu', e.target.value)} />
                   </Field>
                   <Field label="Memory">
-                    <input
-                      style={input}
-                      placeholder="512Mi"
-                      value={config.resources.limits.memory}
-                      onChange={e => setResourcesNested('limits', 'memory', e.target.value)}
-                    />
+                    <input style={input} placeholder="512Mi" value={config.resources.limits.memory} onChange={e => setResourcesNested('limits', 'memory', e.target.value)} />
                   </Field>
                 </Grid2>
               </div>
@@ -1237,16 +772,284 @@ export default function GeneratorPage() {
           )}
         </div>
 
+        <RecommendationsBlock config={config} />
       </div>
 
-      {/* ── RIGHT COLUMN ── */}
-      <div style={{ position: 'sticky', top: '1.5rem' }}>
-        <YamlPreview
-          config={config}
-          chartId={generatedChartId ?? undefined}
-          chartName={config.appName || 'chart'}
-          chartVersion={config.version}
-        />
+      <div style={{ position: 'sticky', top: '5.75rem' }}>
+        <div
+          style={{
+            background: '#0f172a',
+            borderRadius: '1rem',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '760px',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+          }}
+        >
+          <div style={{ padding: '1rem 1.25rem 0', background: '#0f172a' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+              <div>
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  Рабочая панель
+                </div>
+                <div style={{ color: '#e2e8f0', fontSize: '0.88rem', marginTop: '0.2rem' }}>
+                  Все результаты остаются здесь, без скролла по странице
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={!generatedChartId}
+                style={{
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  padding: '0.45rem 0.75rem',
+                  background: generatedChartId ? '#1d4ed8' : '#1e293b',
+                  color: generatedChartId ? '#dbeafe' : '#64748b',
+                  fontWeight: 700,
+                  cursor: generatedChartId ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Скачать .tgz
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.25rem', overflowX: 'auto', marginBottom: '0.5rem' }}>
+              {([
+                ['preview', 'Preview'],
+                ['lint', 'Lint'],
+                ['template', 'Template'],
+                ['dry-run', 'Dry-run'],
+              ] as Array<[WorkspaceSection, string]>).map(([tab, label]) => {
+                const active = workspaceSection === tab
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setWorkspaceSection(tab)}
+                    style={{
+                      padding: '0.55rem 0.9rem',
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      border: 'none',
+                      borderRadius: '0.5rem 0.5rem 0 0',
+                      cursor: 'pointer',
+                      background: active ? '#1e293b' : 'transparent',
+                      color: active ? '#e2e8f0' : '#64748b',
+                      borderBottom: active ? '2px solid #3b82f6' : '2px solid transparent',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, background: '#1e293b', padding: '1rem', overflow: 'auto' }}>
+            {workspaceSection === 'preview' && (
+              <div>
+                <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', marginBottom: '1rem' }}>
+                  {PREVIEW_TABS.map(tab => {
+                    const disabled = isPreviewTabDisabled(tab, config)
+                    const active = previewTab === tab
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => !disabled && setPreviewTab(tab)}
+                        disabled={disabled}
+                        style={{
+                          padding: '0.45rem 0.7rem',
+                          fontSize: '0.74rem',
+                          border: 'none',
+                          borderRadius: '0.45rem',
+                          background: active ? '#2563eb' : '#0f172a',
+                          color: disabled ? '#475569' : '#e2e8f0',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {tab}
+                      </button>
+                    )
+                  })}
+                </div>
+                <pre
+                  style={{
+                    margin: 0,
+                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                    fontSize: '0.78rem',
+                    lineHeight: 1.7,
+                    color: '#e2e8f0',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {previewContent}
+                </pre>
+              </div>
+            )}
+
+            {workspaceSection === 'lint' && (
+              <div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
+                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Результат проверки</div>
+                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                      <span style={{ ...stepChipBase, background: '#334155', color: '#e2e8f0' }}>{validation?.engine === 'helm_lint' ? 'helm lint' : 'builtin'}</span>
+                      <span style={{ ...stepChipBase, background: validation?.valid ? '#14532d' : validation ? '#7f1d1d' : '#334155', color: '#f8fafc' }}>{validation ? (validation.valid ? 'VALID' : 'INVALID') : 'WAITING'}</span>
+                    </div>
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                    {validation?.summary || 'После проверки здесь появится итог helm lint и встроенной валидации.'}
+                  </div>
+                </div>
+
+                {!validation ? (
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Пока нет результата lint. Нажми `Проверить chart` слева.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {validation.errors.length > 0 && (
+                      <div>
+                        <div style={{ color: '#fca5a5', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Ошибки</div>
+                        <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#fecaca' }}>
+                          {validation.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {validation.warnings.length > 0 && (
+                      <div>
+                        <div style={{ color: '#fcd34d', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Предупреждения</div>
+                        <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#fde68a' }}>
+                          {validation.warnings.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div>
+                      <div style={{ color: '#86efac', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Успешные проверки</div>
+                      <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#bbf7d0' }}>
+                        {validation.checks.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {workspaceSection === 'template' && (
+              <div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
+                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Helm Template</div>
+                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                      <span style={{ ...stepChipBase, background: '#1e3a5f', color: '#dbeafe' }}>helm template</span>
+                      <span style={{ ...stepChipBase, background: templateResult?.success ? '#14532d' : templateResult ? '#7f1d1d' : '#334155', color: '#f8fafc' }}>{templateResult ? (templateResult.success ? 'RENDERED' : 'FAILED') : 'WAITING'}</span>
+                    </div>
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                    {templateResult?.summary || 'После рендера здесь появятся итоговые Kubernetes-манифесты.'}
+                  </div>
+                </div>
+
+                {!templateResult ? (
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Пока нет результата template. Нажми `Template` слева.</div>
+                ) : (
+                  <>
+                    {templateResult.errors.length > 0 && (
+                      <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
+                        {templateResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
+                      </ul>
+                    )}
+                    <pre
+                      style={{
+                        margin: 0,
+                        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                        fontSize: '0.78rem',
+                        lineHeight: 1.7,
+                        color: '#dbeafe',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {templateResult.rendered_manifests || '# Helm template не вернул манифесты'}
+                    </pre>
+                  </>
+                )}
+              </div>
+            )}
+
+            {workspaceSection === 'dry-run' && (
+              <div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
+                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Dry-Run Deploy</div>
+                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                      <span style={{ ...stepChipBase, background: '#4c1d95', color: '#ede9fe' }}>helm dry-run</span>
+                      <span style={{ ...stepChipBase, background: dryRunResult?.success ? '#14532d' : dryRunResult ? '#7f1d1d' : '#334155', color: '#f8fafc' }}>{dryRunResult ? (dryRunResult.success ? 'READY' : 'FAILED') : 'WAITING'}</span>
+                    </div>
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                    {dryRunResult?.summary || 'Dry-run deploy покажет, готов ли chart к шагу развёртывания.'}
+                  </div>
+                </div>
+
+                {!dryRunResult ? (
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Пока нет результата dry-run. Нажми `Dry-run` слева.</div>
+                ) : (
+                  <>
+                    {summarizeDryRunError(dryRunResult.errors) && (
+                      <div
+                        style={{
+                          marginBottom: '1rem',
+                          padding: '0.85rem 1rem',
+                          borderRadius: '0.8rem',
+                          background: '#312e81',
+                          border: '1px solid #8b5cf6',
+                          color: '#ddd6fe',
+                          fontSize: '0.84rem',
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        {summarizeDryRunError(dryRunResult.errors)}
+                      </div>
+                    )}
+
+                    <details>
+                      <summary style={{ cursor: 'pointer', color: '#c4b5fd', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.85rem' }}>
+                        Показать технические детали
+                      </summary>
+                      <div style={{ marginTop: '0.75rem' }}>
+                        {dryRunResult.errors.length > 0 && (
+                          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
+                            {dryRunResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
+                          </ul>
+                        )}
+                        <pre
+                          style={{
+                            margin: 0,
+                            fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                            fontSize: '0.78rem',
+                            lineHeight: 1.7,
+                            color: '#e9d5ff',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {dryRunResult.output || '# Dry-run deploy не вернул вывод'}
+                        </pre>
+                      </div>
+                    </details>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
