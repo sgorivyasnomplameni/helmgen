@@ -50,20 +50,20 @@ export default function WorkloadCard({ type, selected, onSelect }: Props) {
         alignItems: 'center',
         gap: '0.5rem',
         padding: '1.25rem 1rem',
-        border: `2px solid ${selected ? '#3b82f6' : '#e2e8f0'}`,
+        border: `2px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
         borderRadius: '0.75rem',
-        background: selected ? '#eff6ff' : 'white',
+        background: selected ? 'var(--accent-soft)' : 'var(--panel)',
         cursor: 'pointer',
         transition: 'all 0.15s',
-        color: selected ? '#2563eb' : '#64748b',
+        color: selected ? 'var(--accent-contrast)' : 'var(--text-muted)',
         textAlign: 'center',
       }}
     >
-      <div style={{ color: selected ? '#3b82f6' : '#94a3b8' }}>{ICONS[type]}</div>
-      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: selected ? '#1d4ed8' : '#374151' }}>
+      <div style={{ color: selected ? 'var(--accent)' : 'var(--text-muted)' }}>{ICONS[type]}</div>
+      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: selected ? 'var(--accent-contrast)' : 'var(--text-soft)' }}>
         {type}
       </span>
-      <span style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.4 }}>
+      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
         {DESCRIPTIONS[type]}
       </span>
     </button>

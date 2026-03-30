@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useDeferredValue, useState } from 'react'
 import type { ChartConfig, WorkloadType, ServiceType, YamlTab } from '@/types/generator'
 import WorkloadCard from '@/components/WorkloadCard'
 import ToggleSwitch from '@/components/ToggleSwitch'
@@ -162,18 +162,18 @@ const DEMO_SCENARIOS: DemoScenario[] = [
 ]
 
 const card: React.CSSProperties = {
-  background: 'white',
+  background: 'var(--panel)',
   borderRadius: '0.875rem',
   padding: '1.5rem',
-  boxShadow: '0 1px 4px rgba(0,0,0,0.07)',
-  border: '1px solid #f1f5f9',
+  boxShadow: 'var(--shadow)',
+  border: '1px solid var(--border)',
 }
 
 const fieldLabel: React.CSSProperties = {
   display: 'block',
   fontSize: '0.78rem',
   fontWeight: 600,
-  color: '#64748b',
+  color: 'var(--text-muted)',
   marginBottom: '0.375rem',
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
@@ -182,25 +182,25 @@ const fieldLabel: React.CSSProperties = {
 const input: React.CSSProperties = {
   width: '100%',
   padding: '0.55rem 0.75rem',
-  border: '1px solid #e2e8f0',
   borderRadius: '0.5rem',
   fontSize: '0.875rem',
   outline: 'none',
-  color: '#1e293b',
-  background: 'white',
+  color: 'var(--text)',
+  background: 'var(--panel-strong)',
+  border: '1px solid var(--border)',
   boxSizing: 'border-box',
 }
 
 const sectionTitle: React.CSSProperties = {
   fontSize: '1rem',
   fontWeight: 700,
-  color: '#1e293b',
+  color: 'var(--text)',
   marginBottom: '1.25rem',
 }
 
 const divider: React.CSSProperties = {
   border: 'none',
-  borderTop: '1px solid #f1f5f9',
+  borderTop: '1px solid var(--border)',
   margin: '1.25rem 0',
 }
 
@@ -211,7 +211,6 @@ const primaryButton: React.CSSProperties = {
   fontSize: '0.96rem',
   padding: '0.875rem 1rem',
   cursor: 'pointer',
-  transition: 'all 0.2s',
 }
 
 const stepChipBase: React.CSSProperties = {
@@ -222,6 +221,15 @@ const stepChipBase: React.CSSProperties = {
   borderRadius: '999px',
   fontSize: '0.76rem',
   fontWeight: 700,
+}
+
+type PipelineStepState = 'idle' | 'active' | 'done'
+
+interface PipelineStep {
+  id: string
+  label: string
+  caption: string
+  state: PipelineStepState
 }
 
 function summarizeDryRunError(errors: string[]): string | null {
@@ -281,6 +289,8 @@ export default function GeneratorPage() {
   const [isDryRunning, setIsDryRunning] = useState(false)
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('preview')
   const [previewTab, setPreviewTab] = useState<YamlTab>('deployment.yaml')
+  const [showScenarios, setShowScenarios] = useState(false)
+  const deferredConfig = useDeferredValue(config)
 
   function resetGenerationState() {
     setStatus('idle')
@@ -442,200 +452,64 @@ export default function GeneratorPage() {
           ? 'Chart готов к следующим шагам проверки и подготовки к развёртыванию.'
           : 'Результаты операций будут появляться во вкладках справа, без автоскролла по странице.'
 
-  const previewContent = getPreviewContent(previewTab, config)
+  const previewContent = getPreviewContent(previewTab, deferredConfig)
+  const pipelineSteps: PipelineStep[] = [
+    {
+      id: 'generate',
+      label: 'Generate',
+      caption: generatedChartId ? 'Chart assembled' : 'Создать chart',
+      state: generatedChartId ? 'done' : 'active',
+    },
+    {
+      id: 'lint',
+      label: 'Lint',
+      caption: validation?.valid ? 'Validated' : generatedChartId ? 'Проверить chart' : 'Ждёт generate',
+      state: validation?.valid ? 'done' : generatedChartId ? 'active' : 'idle',
+    },
+    {
+      id: 'template',
+      label: 'Template',
+      caption: templateResult?.success ? 'Manifest ready' : validation?.valid ? 'Рендер манифестов' : 'После lint',
+      state: templateResult?.success ? 'done' : validation?.valid ? 'active' : 'idle',
+    },
+    {
+      id: 'dry-run',
+      label: 'Dry-run',
+      caption: dryRunResult?.success ? 'Preflight passed' : templateResult?.success ? 'Пробный deploy' : 'После template',
+      state: dryRunResult?.success ? 'done' : templateResult?.success ? 'active' : 'idle',
+    },
+    {
+      id: 'download',
+      label: 'Download',
+      caption: generatedChartId ? 'Архив доступен' : 'Архив появится после generate',
+      state: generatedChartId ? (dryRunResult?.success ? 'done' : 'active') : 'idle',
+    },
+  ]
 
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 460px',
+        gridTemplateColumns: '280px minmax(0, 1fr) 460px',
         gap: '1.5rem',
         alignItems: 'start',
         padding: '1.5rem',
-        maxWidth: '1400px',
+        maxWidth: '1680px',
         margin: '0 auto',
       }}
     >
+      <div style={{ position: 'sticky', top: '5.75rem' }}>
+        <RecommendationsBlock config={deferredConfig} variant="sidebar" />
+      </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>
             Генератор Helm-чартов
           </h1>
-          <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: '#64748b' }}>
-            Настройте параметры и получите готовый Helm-чарт
+          <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            Сначала настройте конфигурацию приложения, затем переходите к lint, template и dry-run.
           </p>
-        </div>
-
-        <div
-          style={{
-            ...card,
-            border: '1px solid #dbeafe',
-            boxShadow: '0 12px 30px rgba(15, 23, 42, 0.06)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
-            <div>
-              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-                Рабочий пайплайн
-              </div>
-              <div style={{ marginTop: '0.25rem', fontSize: '0.84rem', color: '#64748b' }}>
-                Последовательный сценарий: generate, lint, template, dry-run. При переходе в историю состояние формы не теряется.
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <span style={{ ...stepChipBase, background: generatedChartId ? '#dbeafe' : '#e2e8f0', color: generatedChartId ? '#1d4ed8' : '#64748b' }}>1. Generate</span>
-              <span style={{ ...stepChipBase, background: validation?.valid ? '#dcfce7' : validation ? '#fee2e2' : '#e2e8f0', color: validation?.valid ? '#166534' : validation ? '#b91c1c' : '#64748b' }}>2. Lint</span>
-              <span style={{ ...stepChipBase, background: templateResult?.success ? '#dbeafe' : templateResult ? '#fee2e2' : '#e2e8f0', color: templateResult?.success ? '#1d4ed8' : templateResult ? '#b91c1c' : '#64748b' }}>3. Template</span>
-              <span style={{ ...stepChipBase, background: dryRunResult?.success ? '#ede9fe' : dryRunResult ? '#fee2e2' : '#e2e8f0', color: dryRunResult?.success ? '#6d28d9' : dryRunResult ? '#b91c1c' : '#64748b' }}>4. Dry-Run</span>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '0.75rem' }}>
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={status === 'loading'}
-              style={{ ...primaryButton, background: status === 'error' ? '#dc2626' : '#2563eb', color: 'white', cursor: status === 'loading' ? 'not-allowed' : 'pointer', opacity: status === 'loading' ? 0.75 : 1 }}
-            >
-              {status === 'loading' ? 'Генерация...' : 'Сгенерировать'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleValidate()}
-              disabled={!generatedChartId || isValidating || status === 'loading'}
-              style={{ ...primaryButton, background: validation?.valid ? '#16a34a' : '#f59e0b', color: 'white', cursor: !generatedChartId || isValidating || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isValidating || status === 'loading' ? 0.55 : 1 }}
-            >
-              {isValidating ? 'Проверка...' : 'Lint'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleTemplate()}
-              disabled={!generatedChartId || isTemplating || status === 'loading'}
-              style={{ ...primaryButton, background: templateResult?.success ? '#0f766e' : '#0ea5e9', color: 'white', cursor: !generatedChartId || isTemplating || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isTemplating || status === 'loading' ? 0.55 : 1 }}
-            >
-              {isTemplating ? 'Рендер...' : 'Template'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleDryRunDeploy()}
-              disabled={!generatedChartId || isDryRunning || status === 'loading'}
-              style={{ ...primaryButton, background: dryRunResult?.success ? '#7c3aed' : '#8b5cf6', color: 'white', cursor: !generatedChartId || isDryRunning || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isDryRunning || status === 'loading' ? 0.55 : 1 }}
-            >
-              {isDryRunning ? 'Dry-run...' : 'Dry-run'}
-            </button>
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={!generatedChartId}
-              style={{ ...primaryButton, background: '#16a34a', color: 'white', cursor: !generatedChartId ? 'not-allowed' : 'pointer', opacity: !generatedChartId ? 0.55 : 1 }}
-            >
-              Скачать
-            </button>
-          </div>
-
-          <div
-            style={{
-              marginTop: '0.95rem',
-              padding: '0.85rem 1rem',
-              borderRadius: '0.8rem',
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
-              fontSize: '0.84rem',
-              color: '#475569',
-              lineHeight: 1.55,
-            }}
-          >
-            {latestResultSummary}
-          </div>
-        </div>
-
-        <div
-          style={{
-            ...card,
-            background: 'linear-gradient(135deg, #fff7ed 0%, #ffffff 45%, #eff6ff 100%)',
-            border: '1px solid #fed7aa',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
-            <div>
-              <p style={{ ...sectionTitle, marginBottom: '0.35rem' }}>Тестовые сценарии</p>
-              <p style={{ margin: 0, fontSize: '0.86rem', color: '#7c2d12', lineHeight: 1.55 }}>
-                Выберите готовый демо-кейс, чтобы мгновенно заполнить форму и посмотреть результат справа.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                resetGenerationState()
-                setConfig(DEFAULT_CONFIG)
-              }}
-              style={{
-                border: 'none',
-                borderRadius: '999px',
-                background: '#fff',
-                color: '#9a3412',
-                fontWeight: 700,
-                fontSize: '0.78rem',
-                padding: '0.55rem 0.9rem',
-                cursor: 'pointer',
-                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.08)',
-              }}
-            >
-              Сбросить форму
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.9rem' }}>
-            {DEMO_SCENARIOS.map(scenario => {
-              const selected =
-                config.appName === scenario.config.appName &&
-                config.workloadType === scenario.config.workloadType &&
-                config.imageTag === scenario.config.imageTag
-
-              return (
-                <button
-                  key={scenario.id}
-                  type="button"
-                  onClick={() => applyScenario(scenario)}
-                  style={{
-                    textAlign: 'left',
-                    border: `1.5px solid ${selected ? '#fb923c' : '#fdba74'}`,
-                    background: selected ? '#fff7ed' : 'rgba(255,255,255,0.88)',
-                    borderRadius: '0.9rem',
-                    padding: '1rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.8rem',
-                    boxShadow: selected ? '0 10px 24px rgba(249, 115, 22, 0.12)' : 'none',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#7c2d12' }}>{scenario.title}</div>
-                    <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', lineHeight: 1.5, color: '#9a3412' }}>{scenario.summary}</div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                    {scenario.highlights.map(item => (
-                      <span
-                        key={item}
-                        style={{
-                          padding: '0.28rem 0.5rem',
-                          borderRadius: '999px',
-                          background: '#ffedd5',
-                          color: '#c2410c',
-                          fontSize: '0.7rem',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
         </div>
 
         <div style={card}>
@@ -705,10 +579,10 @@ export default function GeneratorPage() {
                         style={{
                           flex: 1,
                           padding: '0.5rem',
-                          border: `2px solid ${config.service.type === t ? '#3b82f6' : '#e2e8f0'}`,
+                          border: `2px solid ${config.service.type === t ? 'var(--accent)' : 'var(--border)'}`,
                           borderRadius: '0.5rem',
-                          background: config.service.type === t ? '#eff6ff' : 'white',
-                          color: config.service.type === t ? '#2563eb' : '#64748b',
+                          background: config.service.type === t ? 'var(--accent-soft)' : 'var(--panel-strong)',
+                          color: config.service.type === t ? 'var(--accent-contrast)' : 'var(--text-muted)',
                           fontWeight: 600,
                           fontSize: '0.78rem',
                           cursor: 'pointer',
@@ -747,7 +621,7 @@ export default function GeneratorPage() {
           {config.resources.enabled && (
             <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>REQUESTS</p>
+                <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>REQUESTS</p>
                 <Grid2>
                   <Field label="CPU">
                     <input style={input} placeholder="100m" value={config.resources.requests.cpu} onChange={e => setResourcesNested('requests', 'cpu', e.target.value)} />
@@ -758,7 +632,7 @@ export default function GeneratorPage() {
                 </Grid2>
               </div>
               <div>
-                <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>LIMITS</p>
+                <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>LIMITS</p>
                 <Grid2>
                   <Field label="CPU">
                     <input style={input} placeholder="500m" value={config.resources.limits.cpu} onChange={e => setResourcesNested('limits', 'cpu', e.target.value)} />
@@ -772,28 +646,285 @@ export default function GeneratorPage() {
           )}
         </div>
 
-        <RecommendationsBlock config={config} />
+        <div
+          style={{
+            ...card,
+            border: '1px solid var(--border)',
+            background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
+                Pipeline
+              </div>
+              <div style={{ marginTop: '0.2rem', fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.55 }}>
+                Визуальная цепочка показывает, на каком этапе подготовки Helm-чарта вы находитесь сейчас.
+              </div>
+            </div>
+            <span style={{ ...stepChipBase, background: 'var(--panel-strong)', color: 'var(--text-soft)', border: '1px solid var(--border)' }}>
+              {dryRunResult?.success ? 'Ready to ship' : templateResult?.success ? 'Preflight stage' : validation?.valid ? 'Validation stage' : generatedChartId ? 'Draft ready' : 'Editing'}
+            </span>
+          </div>
+
+          <div
+            style={{
+              position: 'relative',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+              gap: '0.75rem',
+              alignItems: 'start',
+              marginBottom: '1rem',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                left: '10%',
+                right: '10%',
+                height: '1px',
+                background: 'var(--border)',
+                zIndex: 0,
+              }}
+            />
+            {pipelineSteps.map(step => {
+              const isDone = step.state === 'done'
+              const isActive = step.state === 'active'
+              return (
+                <div
+                  key={step.id}
+                  style={{
+                    position: 'relative',
+                    zIndex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    textAlign: 'center',
+                    gap: '0.5rem',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '2rem',
+                      height: '2rem',
+                      borderRadius: '999px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.8rem',
+                      fontWeight: 800,
+                      background: isDone ? 'var(--success)' : isActive ? 'var(--accent)' : 'var(--panel-strong)',
+                      color: isDone || isActive ? 'white' : 'var(--text-muted)',
+                      border: `1px solid ${isDone ? 'var(--success)' : isActive ? 'var(--accent)' : 'var(--border)'}`,
+                      boxShadow: isActive ? '0 0 0 4px rgba(59, 130, 246, 0.12)' : 'none',
+                    }}
+                  >
+                    {isDone ? '✓' : step.id === 'download' ? '↓' : step.label.slice(0, 1)}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: isDone ? 'var(--success)' : isActive ? 'var(--text)' : 'var(--text-soft)' }}>
+                      {step.label}
+                    </div>
+                    <div style={{ marginTop: '0.2rem', fontSize: '0.72rem', lineHeight: 1.45, color: 'var(--text-muted)' }}>
+                      {step.caption}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1fr', gap: '0.75rem' }}>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={status === 'loading'}
+              style={{ ...primaryButton, background: status === 'error' ? 'var(--danger)' : 'var(--accent)', color: 'white', cursor: status === 'loading' ? 'not-allowed' : 'pointer', opacity: status === 'loading' ? 0.75 : 1 }}
+            >
+              {status === 'loading' ? 'Генерация...' : 'Сгенерировать'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleValidate()}
+              disabled={!generatedChartId || isValidating || status === 'loading'}
+              style={{ ...primaryButton, background: 'var(--panel-strong)', color: validation?.valid ? 'var(--success)' : 'var(--text-soft)', border: `1px solid ${validation?.valid ? 'var(--success)' : 'var(--border)'}`, cursor: !generatedChartId || isValidating || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isValidating || status === 'loading' ? 0.55 : 1 }}
+            >
+              {isValidating ? 'Проверка...' : 'Lint'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleTemplate()}
+              disabled={!generatedChartId || isTemplating || status === 'loading'}
+              style={{ ...primaryButton, background: 'var(--panel-strong)', color: templateResult?.success ? 'var(--accent-contrast)' : 'var(--text-soft)', border: `1px solid ${templateResult?.success ? 'var(--accent)' : 'var(--border)'}`, cursor: !generatedChartId || isTemplating || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isTemplating || status === 'loading' ? 0.55 : 1 }}
+            >
+              {isTemplating ? 'Рендер...' : 'Template'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDryRunDeploy()}
+              disabled={!generatedChartId || isDryRunning || status === 'loading'}
+              style={{ ...primaryButton, background: 'var(--panel-strong)', color: dryRunResult?.success ? '#8b5cf6' : 'var(--text-soft)', border: `1px solid ${dryRunResult?.success ? '#8b5cf6' : 'var(--border)'}`, cursor: !generatedChartId || isDryRunning || status === 'loading' ? 'not-allowed' : 'pointer', opacity: !generatedChartId || isDryRunning || status === 'loading' ? 0.55 : 1 }}
+            >
+              {isDryRunning ? 'Dry-run...' : 'Dry-run'}
+            </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={!generatedChartId}
+              style={{ ...primaryButton, background: 'var(--success)', color: 'white', cursor: !generatedChartId ? 'not-allowed' : 'pointer', opacity: !generatedChartId ? 0.55 : 1 }}
+            >
+              Скачать
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: '0.9rem',
+              padding: '0.8rem 0.95rem',
+              borderRadius: '0.75rem',
+              background: 'var(--panel)',
+              border: '1px solid var(--border)',
+              fontSize: '0.83rem',
+              color: 'var(--text-soft)',
+              lineHeight: 1.55,
+            }}
+          >
+            {latestResultSummary}
+          </div>
+        </div>
+
+        <div
+          style={{
+            ...card,
+            padding: '1.1rem 1.25rem',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text)' }}>
+                Тестовые сценарии
+              </div>
+              <div style={{ marginTop: '0.2rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Готовые демо-кейсы можно открыть после базовой настройки формы.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  resetGenerationState()
+                  setConfig(DEFAULT_CONFIG)
+                }}
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: '999px',
+                  background: 'var(--panel-strong)',
+                  color: 'var(--text-soft)',
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  padding: '0.5rem 0.85rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Сбросить
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowScenarios(prev => !prev)}
+                style={{
+                  border: 'none',
+                  borderRadius: '999px',
+                  background: 'var(--accent-soft)',
+                  color: 'var(--accent-contrast)',
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  padding: '0.5rem 0.9rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {showScenarios ? 'Скрыть' : 'Показать'}
+              </button>
+            </div>
+          </div>
+
+          {showScenarios && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.9rem', marginTop: '1rem' }}>
+              {DEMO_SCENARIOS.map(scenario => {
+                const selected =
+                  config.appName === scenario.config.appName &&
+                  config.workloadType === scenario.config.workloadType &&
+                  config.imageTag === scenario.config.imageTag
+
+                return (
+                  <button
+                    key={scenario.id}
+                    type="button"
+                    onClick={() => applyScenario(scenario)}
+                    style={{
+                      textAlign: 'left',
+                      border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+                      background: selected ? 'var(--accent-soft)' : 'var(--panel-strong)',
+                      borderRadius: '0.9rem',
+                      padding: '1rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.8rem',
+                      boxShadow: selected ? 'var(--shadow)' : 'none',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text)' }}>{scenario.title}</div>
+                      <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>{scenario.summary}</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                      {scenario.highlights.map(item => (
+                        <span
+                          key={item}
+                        style={{
+                          padding: '0.28rem 0.5rem',
+                          borderRadius: '999px',
+                          background: 'var(--panel-contrast)',
+                          color: 'var(--text-soft)',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                        }}
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{ position: 'sticky', top: '5.75rem' }}>
         <div
           style={{
-            background: '#0f172a',
+            background: 'var(--workspace-bg)',
             borderRadius: '1rem',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
             minHeight: '760px',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+            boxShadow: 'var(--shadow)',
+            border: '1px solid var(--workspace-border)',
           }}
         >
-          <div style={{ padding: '1rem 1.25rem 0', background: '#0f172a' }}>
+          <div style={{ padding: '1rem 1.25rem 0', background: 'var(--workspace-bg)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
               <div>
-                <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                <div style={{ color: 'var(--workspace-muted)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   Рабочая панель
                 </div>
-                <div style={{ color: '#e2e8f0', fontSize: '0.88rem', marginTop: '0.2rem' }}>
+                <div style={{ color: 'var(--workspace-text)', fontSize: '0.88rem', marginTop: '0.2rem' }}>
                   Все результаты остаются здесь, без скролла по странице
                 </div>
               </div>
@@ -805,8 +936,8 @@ export default function GeneratorPage() {
                   border: 'none',
                   borderRadius: '0.5rem',
                   padding: '0.45rem 0.75rem',
-                  background: generatedChartId ? '#1d4ed8' : '#1e293b',
-                  color: generatedChartId ? '#dbeafe' : '#64748b',
+                  background: generatedChartId ? 'var(--accent)' : 'var(--workspace-surface)',
+                  color: generatedChartId ? 'var(--workspace-text)' : 'var(--workspace-muted)',
                   fontWeight: 700,
                   cursor: generatedChartId ? 'pointer' : 'not-allowed',
                 }}
@@ -835,9 +966,9 @@ export default function GeneratorPage() {
                       border: 'none',
                       borderRadius: '0.5rem 0.5rem 0 0',
                       cursor: 'pointer',
-                      background: active ? '#1e293b' : 'transparent',
-                      color: active ? '#e2e8f0' : '#64748b',
-                      borderBottom: active ? '2px solid #3b82f6' : '2px solid transparent',
+                      background: active ? 'var(--workspace-surface)' : 'transparent',
+                      color: active ? 'var(--workspace-text)' : 'var(--workspace-muted)',
+                      borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
                       whiteSpace: 'nowrap',
                     }}
                   >
@@ -848,12 +979,12 @@ export default function GeneratorPage() {
             </div>
           </div>
 
-          <div style={{ flex: 1, background: '#1e293b', padding: '1rem', overflow: 'auto' }}>
+          <div style={{ flex: 1, background: 'var(--workspace-surface)', padding: '1rem', overflow: 'auto' }}>
             {workspaceSection === 'preview' && (
               <div>
                 <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', marginBottom: '1rem' }}>
                   {PREVIEW_TABS.map(tab => {
-                    const disabled = isPreviewTabDisabled(tab, config)
+                    const disabled = isPreviewTabDisabled(tab, deferredConfig)
                     const active = previewTab === tab
                     return (
                       <button
@@ -862,15 +993,15 @@ export default function GeneratorPage() {
                         onClick={() => !disabled && setPreviewTab(tab)}
                         disabled={disabled}
                         style={{
-                          padding: '0.45rem 0.7rem',
-                          fontSize: '0.74rem',
-                          border: 'none',
-                          borderRadius: '0.45rem',
-                          background: active ? '#2563eb' : '#0f172a',
-                          color: disabled ? '#475569' : '#e2e8f0',
-                          cursor: disabled ? 'not-allowed' : 'pointer',
-                          whiteSpace: 'nowrap',
-                        }}
+                        padding: '0.45rem 0.7rem',
+                        fontSize: '0.74rem',
+                        border: 'none',
+                        borderRadius: '0.45rem',
+                        background: active ? 'var(--accent)' : 'var(--workspace-surface-2)',
+                        color: disabled ? '#51627d' : 'var(--workspace-text)',
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
                       >
                         {tab}
                       </button>
@@ -883,7 +1014,7 @@ export default function GeneratorPage() {
                     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
                     fontSize: '0.78rem',
                     lineHeight: 1.7,
-                    color: '#e2e8f0',
+                    color: 'var(--workspace-text)',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                   }}

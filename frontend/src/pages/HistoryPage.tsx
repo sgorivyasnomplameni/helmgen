@@ -9,10 +9,10 @@ const pageShell: React.CSSProperties = {
 }
 
 const card: React.CSSProperties = {
-  background: 'white',
+  background: 'var(--panel)',
   borderRadius: '1rem',
-  border: '1px solid #e2e8f0',
-  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
+  border: '1px solid var(--border)',
+  boxShadow: 'var(--shadow)',
 }
 
 const actionButton: React.CSSProperties = {
@@ -87,10 +87,10 @@ export default function HistoryPage({ active = true }: Props) {
   return (
     <div style={pageShell}>
       <div style={{ marginBottom: '1.25rem' }}>
-        <h1 style={{ margin: 0, fontSize: '1.7rem', fontWeight: 800, color: '#0f172a' }}>
+        <h1 style={{ margin: 0, fontSize: '1.7rem', fontWeight: 800, color: 'var(--text)' }}>
           История чартов
         </h1>
-        <p style={{ margin: '0.35rem 0 0', color: '#64748b', fontSize: '0.95rem' }}>
+        <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
           Здесь собраны все сохранённые генерации HelmGen с быстрым скачиванием и очисткой.
         </p>
       </div>
@@ -106,10 +106,10 @@ export default function HistoryPage({ active = true }: Props) {
           }}
         >
           <div>
-            <div style={{ fontSize: '0.82rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Всего записей
             </div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a' }}>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text)' }}>
               {charts.length}
             </div>
           </div>
@@ -119,8 +119,8 @@ export default function HistoryPage({ active = true }: Props) {
             disabled={loading}
             style={{
               ...actionButton,
-              background: loading ? '#cbd5e1' : '#e2e8f0',
-              color: '#0f172a',
+              background: loading ? 'var(--border-strong)' : 'var(--panel-contrast)',
+              color: 'var(--text)',
             }}
           >
             {loading ? 'Обновление...' : 'Обновить'}
@@ -133,9 +133,9 @@ export default function HistoryPage({ active = true }: Props) {
               marginBottom: '1rem',
               padding: '0.85rem 1rem',
               borderRadius: '0.8rem',
-              background: '#fef2f2',
-              color: '#b91c1c',
-              border: '1px solid #fecaca',
+              background: 'var(--danger-soft)',
+              color: 'var(--danger)',
+              border: '1px solid var(--border)',
             }}
           >
             {error}
@@ -143,7 +143,7 @@ export default function HistoryPage({ active = true }: Props) {
         )}
 
         {loading ? (
-          <div style={{ padding: '1.5rem', color: '#64748b', textAlign: 'center' }}>
+          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', textAlign: 'center' }}>
             Загружаем историю...
           </div>
         ) : charts.length === 0 ? (
@@ -151,10 +151,10 @@ export default function HistoryPage({ active = true }: Props) {
             style={{
               padding: '2rem',
               borderRadius: '0.9rem',
-              background: '#f8fafc',
-              border: '1px dashed #cbd5e1',
+              background: 'var(--panel-muted)',
+              border: '1px dashed var(--border-strong)',
               textAlign: 'center',
-              color: '#64748b',
+              color: 'var(--text-muted)',
             }}
           >
             История пока пустая. Сгенерируйте первый Helm-чарт на вкладке генератора.
@@ -167,7 +167,7 @@ export default function HistoryPage({ active = true }: Props) {
                 <div
                   key={chart.id}
                   style={{
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--border)',
                     borderRadius: '0.9rem',
                     padding: '1rem',
                     display: 'grid',
@@ -178,7 +178,7 @@ export default function HistoryPage({ active = true }: Props) {
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                      <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
                         {chart.name}
                       </div>
                       <span
@@ -187,17 +187,17 @@ export default function HistoryPage({ active = true }: Props) {
                           borderRadius: '999px',
                           fontSize: '0.72rem',
                           fontWeight: 700,
-                          background: isGenerated ? '#dcfce7' : '#fef3c7',
-                          color: isGenerated ? '#166534' : '#92400e',
+                          background: isGenerated ? 'var(--success-soft)' : 'var(--warning-soft)',
+                          color: isGenerated ? 'var(--success)' : 'var(--warning)',
                         }}
                       >
                         {isGenerated ? 'Сгенерирован' : 'Черновик'}
                       </span>
                     </div>
-                    <div style={{ marginTop: '0.45rem', color: '#475569', fontSize: '0.88rem' }}>
+                    <div style={{ marginTop: '0.45rem', color: 'var(--text-soft)', fontSize: '0.88rem' }}>
                       {chart.description || 'Описание не указано'}
                     </div>
-                    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', color: '#64748b', fontSize: '0.8rem' }}>
+                    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                       <span>Chart: {chart.chart_version}</span>
                       <span>App: {chart.app_version}</span>
                       <span>Создан: {formatDate(chart.created_at)}</span>
@@ -211,8 +211,8 @@ export default function HistoryPage({ active = true }: Props) {
                       onClick={() => handleDownload(chart.id, chart.name, chart.chart_version)}
                       style={{
                         ...actionButton,
-                        background: isGenerated ? '#dbeafe' : '#e2e8f0',
-                        color: isGenerated ? '#1d4ed8' : '#94a3b8',
+                        background: isGenerated ? 'var(--accent-soft)' : 'var(--panel-contrast)',
+                        color: isGenerated ? 'var(--accent-contrast)' : 'var(--text-muted)',
                         cursor: isGenerated ? 'pointer' : 'not-allowed',
                       }}
                     >
@@ -224,8 +224,8 @@ export default function HistoryPage({ active = true }: Props) {
                       disabled={deletingId === chart.id}
                       style={{
                         ...actionButton,
-                        background: deletingId === chart.id ? '#fecaca' : '#fee2e2',
-                        color: '#b91c1c',
+                        background: deletingId === chart.id ? 'var(--danger-soft)' : 'var(--danger-soft)',
+                        color: 'var(--danger)',
                       }}
                     >
                       {deletingId === chart.id ? 'Удаление...' : 'Удалить'}

@@ -1,11 +1,21 @@
-import { useState } from 'react'
+import { startTransition, useEffect, useState } from 'react'
 import GeneratorPage from '@/pages/GeneratorPage'
 import HistoryPage from '@/pages/HistoryPage'
 
 type View = 'generator' | 'history'
+type Theme = 'light' | 'dark'
 
 export default function App() {
   const [view, setView] = useState<View>('generator')
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = window.localStorage.getItem('helmgen-theme')
+    return saved === 'dark' ? 'dark' : 'light'
+  })
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    window.localStorage.setItem('helmgen-theme', theme)
+  }, [theme])
 
   return (
     <div>
@@ -14,14 +24,13 @@ export default function App() {
           position: 'sticky',
           top: 0,
           zIndex: 20,
-          backdropFilter: 'blur(16px)',
-          background: 'rgba(241, 245, 249, 0.88)',
-          borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
+          background: 'var(--bg-elevated)',
+          borderBottom: '1px solid var(--workspace-border)',
         }}
       >
         <div
           style={{
-            maxWidth: '1400px',
+            maxWidth: '1680px',
             margin: '0 auto',
             padding: '0.9rem 1.5rem',
             display: 'flex',
@@ -31,52 +40,81 @@ export default function App() {
           }}
         >
           <div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#0f172a' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--text)' }}>
               HelmGen
             </div>
-            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               Генерация и хранение Helm-чартов
             </div>
           </div>
-          <div
-            style={{
-              display: 'inline-flex',
-              padding: '0.25rem',
-              background: '#e2e8f0',
-              borderRadius: '999px',
-              gap: '0.25rem',
-            }}
-          >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <button
               type="button"
-              onClick={() => setView('generator')}
+              onClick={() => {
+                startTransition(() => {
+                  setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
+                })
+              }}
               style={{
-                border: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.55rem',
+                padding: '0.55rem 0.85rem',
                 borderRadius: '999px',
-                padding: '0.6rem 1rem',
+                border: '1px solid var(--border)',
+                background: 'var(--panel-contrast)',
+                color: 'var(--text-soft)',
                 fontWeight: 700,
                 cursor: 'pointer',
-                background: view === 'generator' ? '#0f172a' : 'transparent',
-                color: view === 'generator' ? 'white' : '#334155',
               }}
             >
-              Генератор
+              <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>
+                {theme === 'dark' ? '◐' : '◑'}
+              </span>
+              <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setView('history')}
+
+            <div
               style={{
-                border: 'none',
+                display: 'inline-flex',
+                padding: '0.25rem',
+                background: 'var(--panel-contrast)',
                 borderRadius: '999px',
-                padding: '0.6rem 1rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                background: view === 'history' ? '#0f172a' : 'transparent',
-                color: view === 'history' ? 'white' : '#334155',
+                gap: '0.25rem',
+                border: '1px solid var(--border)',
               }}
             >
-              История
-            </button>
+              <button
+                type="button"
+                onClick={() => setView('generator')}
+                style={{
+                  border: 'none',
+                  borderRadius: '999px',
+                  padding: '0.6rem 1rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: view === 'generator' ? 'var(--workspace-bg)' : 'transparent',
+                  color: view === 'generator' ? 'var(--workspace-text)' : 'var(--text-soft)',
+                }}
+              >
+                Генератор
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('history')}
+                style={{
+                  border: 'none',
+                  borderRadius: '999px',
+                  padding: '0.6rem 1rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: view === 'history' ? 'var(--workspace-bg)' : 'transparent',
+                  color: view === 'history' ? 'var(--workspace-text)' : 'var(--text-soft)',
+                }}
+              >
+                История
+              </button>
+            </div>
           </div>
         </div>
       </header>
