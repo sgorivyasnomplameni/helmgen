@@ -84,12 +84,15 @@ def _builtin_validate(chart) -> ValidationResult:
     elif ingress_section is not None:
         checks.append("Ingress отключён в values.yaml")
 
-    if 'tag: "latest"' in values_yaml:
+    image_section = values_data.get("image")
+    image_tag = image_section.get("tag", "") if isinstance(image_section, dict) else ""
+    if image_tag in ("latest", ""):
         warnings.append("Тег latest нежелателен для production-сценариев")
     else:
         checks.append("Используется фиксированная версия образа")
 
-    if "resources: {}" in values_yaml:
+    resources_val = values_data.get("resources")
+    if resources_val == {} or resources_val is None:
         warnings.append("Resource limits не заданы")
     else:
         checks.append("Resource limits заданы")

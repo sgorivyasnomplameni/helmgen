@@ -217,7 +217,9 @@ def _parse_values_yaml(values_yaml: str | None) -> dict:
             stack.append((indent, child))
             continue
 
-        if value.startswith('"') and value.endswith('"'):
+        if value == "{}":
+            parsed_value = {}
+        elif value.startswith('"') and value.endswith('"'):
             parsed_value = value[1:-1]
         elif value == "true":
             parsed_value = True
@@ -248,7 +250,7 @@ def _is_feature_enabled(values_data: dict, section_name: str, default: bool) -> 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def generate_chart(chart) -> str:
-    """Return a multi-document YAML bundle (Chart.yaml / values.yaml / deployment.yaml)."""
+    """Return a multi-document YAML bundle representing the full chart preview."""
     ctx = {
         "name": chart.name,
         "description": chart.description,
@@ -259,13 +261,20 @@ def generate_chart(chart) -> str:
     values_yaml = chart.values_yaml or VALUES_YAML_TEMPLATE
     values_data = _parse_values_yaml(values_yaml)
     workload_type = values_data.get("workload", {}).get("type", "Deployment")
-    deployment_yaml = _render_deployment(chart.name, workload_type)
+    service_enabled = _is_feature_enabled(values_data, "service", True)
+    ingress_enabled = _is_feature_enabled(values_data, "ingress", False)
 
-    return "\n---\n".join([
+    sections = [
         f"# Chart.yaml\n{chart_yaml}",
         f"# values.yaml\n{values_yaml}",
-        f"# templates/deployment.yaml\n{deployment_yaml}",
-    ])
+        f"# templates/deployment.yaml\n{_render_deployment(chart.name, workload_type)}",
+    ]
+    if service_enabled:
+        sections.append(f"# templates/service.yaml\n{_render_service(chart.name)}")
+    if ingress_enabled:
+        sections.append(f"# templates/ingress.yaml\n{_render_ingress(chart.name)}")
+
+    return "\n---\n".join(sections)
 
 
 def build_chart_archive(chart) -> bytes:
@@ -315,9 +324,11 @@ def build_chart_archive(chart) -> bytes:
         write(os.path.join(templates_dir, "_helpers.tpl"),         _render_helpers(name))
         write(os.path.join(templates_dir, "deployment.yaml"),      deployment_content)
         if service_enabled:
-            write(os.path.join(templates_dir, "service.yaml"),     _render_service(name))
+            service_content = sections.get("templates/service.yaml", _render_service(name))
+            write(os.path.join(templates_dir, "service.yaml"),     service_content)
         if ingress_enabled:
-            write(os.path.join(templates_dir, "ingress.yaml"),     _render_ingress(name))
+            ingress_content = sections.get("templates/ingress.yaml", _render_ingress(name))
+            write(os.path.join(templates_dir, "ingress.yaml"),     ingress_content)
 
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w:gz") as tar:
