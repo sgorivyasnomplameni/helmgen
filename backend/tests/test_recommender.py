@@ -44,6 +44,11 @@ def test_statefulset_two_replicas_triggers_quorum_warning(rs: RecommendationSyst
     assert any("quorum" in r for r in recs)
 
 
+def test_statefulset_four_replicas_also_triggers_quorum_warning(rs: RecommendationSystem) -> None:
+    recs = rs.analyze(params(workload_type="StatefulSet", replicas=4))
+    assert any("Чаще выбирают 3 или 5" in r for r in recs)
+
+
 # ── replicas > 10 ──────────────────────────────────────────────────────────────
 
 def test_eleven_replicas_triggers_warning(rs: RecommendationSystem) -> None:
@@ -60,12 +65,12 @@ def test_ten_replicas_no_warning(rs: RecommendationSystem) -> None:
 
 def test_daemonset_many_replicas_triggers_warning(rs: RecommendationSystem) -> None:
     recs = rs.analyze(params(workload_type="DaemonSet", replicas=3))
-    assert any("replicas игнорируется" in r for r in recs)
+    assert any("поле replicas" in r for r in recs)
 
 
 def test_daemonset_one_replica_no_warning(rs: RecommendationSystem) -> None:
     recs = rs.analyze(params(workload_type="DaemonSet", replicas=1))
-    assert not any("replicas игнорируется" in r for r in recs)
+    assert not any("поле replicas" in r for r in recs)
 
 
 def test_deployment_many_replicas_no_daemonset_warning(rs: RecommendationSystem) -> None:
@@ -144,6 +149,21 @@ def test_ingress_and_loadbalancer_warn_about_overlap(rs: RecommendationSystem) -
 def test_daemonset_loadbalancer_warns(rs: RecommendationSystem) -> None:
     recs = rs.analyze(params(workload_type="DaemonSet", service_enabled=True, service_type="LoadBalancer"))
     assert any("DaemonSet редко публикуют" in r for r in recs)
+
+
+def test_daemonset_service_triggers_contextual_note(rs: RecommendationSystem) -> None:
+    recs = rs.analyze(params(workload_type="DaemonSet", service_enabled=True, service_type="ClusterIP"))
+    assert any("Service нужен не всегда" in r for r in recs)
+
+
+def test_statefulset_ingress_warns(rs: RecommendationSystem) -> None:
+    recs = rs.analyze(params(workload_type="StatefulSet", ingress_enabled=True))
+    assert any("редко публикуют напрямую через Ingress" in r for r in recs)
+
+
+def test_production_like_without_limits_adds_extra_note(rs: RecommendationSystem) -> None:
+    recs = rs.analyze(params(service_type="LoadBalancer", resource_limits=False))
+    assert any("production-подобной" in r for r in recs)
 
 
 # ── clean config ───────────────────────────────────────────────────────────────

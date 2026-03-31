@@ -9,7 +9,7 @@ import tempfile
 
 from pydantic import BaseModel
 
-from app.services.helm_generator import build_chart_archive
+from app.services.helm_generator import build_chart_archive, _parse_values_yaml
 
 
 class ValidationResult(BaseModel):
@@ -59,21 +59,29 @@ def _builtin_validate(chart) -> ValidationResult:
         else:
             checks.append("DaemonSet корректно сгенерирован без replicas")
 
-    if "service:\n  enabled: false" in values_yaml:
+    values_data = _parse_values_yaml(values_yaml)
+    service_section = values_data.get("service")
+    service_enabled = service_section.get("enabled", True) if isinstance(service_section, dict) else True
+
+    if service_section is None:
+        warnings.append("В values.yaml отсутствует секция service")
+    elif not service_enabled:
         if "# Service отключён" not in generated_yaml and "templates/service.yaml" in generated_yaml:
             warnings.append("Service отключён в values, но шаблон service мог сохраниться в preview")
         checks.append("Service отключён в values.yaml")
-    elif "service:" in values_yaml:
-        checks.append("Service секция присутствует в values.yaml")
     else:
-        warnings.append("В values.yaml отсутствует секция service")
+        checks.append("Service секция присутствует в values.yaml")
 
-    if "ingress:\n  enabled: true" in values_yaml:
-        if 'host: ""' in values_yaml or "host:" not in values_yaml:
+    ingress_section = values_data.get("ingress")
+    ingress_enabled = ingress_section.get("enabled", False) if isinstance(ingress_section, dict) else False
+
+    if ingress_enabled:
+        ingress_host = ingress_section.get("host", "") if isinstance(ingress_section, dict) else ""
+        if not ingress_host or ingress_host == '""':
             errors.append("Для включённого ingress должен быть задан host")
         else:
             checks.append("Ingress включён и содержит host")
-    elif "ingress:\n  enabled: false" in values_yaml:
+    elif ingress_section is not None:
         checks.append("Ingress отключён в values.yaml")
 
     if 'tag: "latest"' in values_yaml:

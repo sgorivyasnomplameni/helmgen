@@ -7,6 +7,14 @@ interface Props {
   variant?: 'default' | 'sidebar'
 }
 
+type RecommendationSeverity = 'critical' | 'warning' | 'note'
+
+interface ParsedRecommendation {
+  severity: RecommendationSeverity
+  label: string
+  message: string
+}
+
 const WarningIcon = () => (
   <svg
     width="15"
@@ -74,13 +82,44 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
     config.ingress.enabled,
   ])
 
-  const warningCount = recommendations.length
+  const parsedRecommendations: ParsedRecommendation[] = recommendations.map(item => {
+    if (item.startsWith('Критично:')) {
+      return {
+        severity: 'critical',
+        label: 'Критично',
+        message: item.replace('Критично:', '').trim(),
+      }
+    }
+
+    if (item.startsWith('Внимание:')) {
+      return {
+        severity: 'warning',
+        label: 'Внимание',
+        message: item.replace('Внимание:', '').trim(),
+      }
+    }
+
+    return {
+      severity: 'note',
+      label: 'Рекомендация',
+      message: item.replace('Рекомендация:', '').trim(),
+    }
+  })
+
+  const warningCount = parsedRecommendations.length
+  const hasCritical = parsedRecommendations.some(item => item.severity === 'critical')
   const readinessLabel =
-    warningCount === 0 ? 'Готово' : warningCount <= 2 ? 'Проверить' : 'Риски'
+    warningCount === 0 ? 'Готово' : hasCritical ? 'Риски' : warningCount <= 2 ? 'Проверить' : 'Риски'
   const readinessColor =
-    warningCount === 0 ? 'var(--success)' : warningCount <= 2 ? 'var(--text-soft)' : 'var(--warning)'
+    warningCount === 0 ? 'var(--success)' : hasCritical ? 'var(--danger)' : warningCount <= 2 ? 'var(--text-soft)' : 'var(--warning)'
   const readinessBackground =
-    warningCount === 0 ? 'var(--success-soft)' : warningCount <= 2 ? 'var(--panel-strong)' : 'color-mix(in srgb, var(--warning-soft) 65%, var(--panel) 35%)'
+    warningCount === 0
+      ? 'var(--success-soft)'
+      : hasCritical
+        ? 'color-mix(in srgb, var(--danger) 14%, var(--panel) 86%)'
+        : warningCount <= 2
+          ? 'var(--panel-strong)'
+          : 'color-mix(in srgb, var(--warning-soft) 65%, var(--panel) 35%)'
 
   if (variant === 'sidebar') {
     return (
@@ -155,7 +194,7 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
             alignContent: 'start',
           }}
         >
-          {recommendations.length === 0 && !loading ? (
+          {parsedRecommendations.length === 0 && !loading ? (
             <div
               style={{
                 display: 'flex',
@@ -178,9 +217,9 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
                 </div>
               </div>
           ) : (
-            recommendations.slice(0, 4).map((rec, i) => (
+            parsedRecommendations.slice(0, 4).map((rec, i) => (
               <div
-                key={i}
+                key={`${rec.label}-${i}`}
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',
@@ -189,16 +228,36 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
                   borderRadius: '0.85rem',
                   background: 'var(--panel-strong)',
                   border: '1px solid var(--border)',
-                  boxShadow: 'inset 2px 0 0 color-mix(in srgb, var(--warning) 80%, transparent)',
+                  boxShadow: `inset 2px 0 0 ${
+                    rec.severity === 'critical'
+                      ? 'color-mix(in srgb, var(--danger) 80%, transparent)'
+                      : rec.severity === 'warning'
+                        ? 'color-mix(in srgb, var(--warning) 80%, transparent)'
+                        : 'color-mix(in srgb, var(--accent) 70%, transparent)'
+                  }`,
                 }}
               >
                 <WarningIcon />
                 <div>
-                  <div style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--warning)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    {i === 0 ? 'Главное' : `Замечание ${i + 1}`}
+                  <div
+                    style={{
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      color:
+                        rec.severity === 'critical'
+                          ? 'var(--danger)'
+                          : rec.severity === 'warning'
+                            ? 'var(--warning)'
+                            : 'var(--accent)',
+                      marginBottom: '0.2rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    {rec.label}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-soft)', lineHeight: 1.5 }}>
-                    {rec}
+                    {rec.message}
                   </div>
                 </div>
               </div>
@@ -237,7 +296,7 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
         )}
       </div>
 
-      {recommendations.length === 0 && !loading ? (
+      {parsedRecommendations.length === 0 && !loading ? (
         <div
           style={{
             display: 'flex',
@@ -261,26 +320,43 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
         </div>
       ) : (
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: '0.7rem' }}>
-          {recommendations.map((rec, i) => (
+          {parsedRecommendations.map((rec, i) => (
             <li
-              key={i}
+              key={`${rec.label}-${i}`}
               style={{
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: '0.7rem',
                 padding: '0.9rem 1rem',
                 borderRadius: '0.85rem',
-                background: 'var(--warning-soft)',
+                background:
+                  rec.severity === 'critical'
+                    ? 'color-mix(in srgb, var(--danger) 10%, var(--panel) 90%)'
+                    : rec.severity === 'warning'
+                      ? 'var(--warning-soft)'
+                      : 'color-mix(in srgb, var(--accent) 10%, var(--panel) 90%)',
                 border: '1px solid var(--border)',
               }}
             >
               <WarningIcon />
               <div>
-                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--warning)', marginBottom: '0.15rem' }}>
-                  Рекомендация {i + 1}
+                <div
+                  style={{
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    color:
+                      rec.severity === 'critical'
+                        ? 'var(--danger)'
+                        : rec.severity === 'warning'
+                          ? 'var(--warning)'
+                          : 'var(--accent)',
+                    marginBottom: '0.15rem',
+                  }}
+                >
+                  {rec.label}
                 </div>
                 <span style={{ fontSize: '0.82rem', color: 'var(--text-soft)', lineHeight: 1.55 }}>
-                  {rec}
+                  {rec.message}
                 </span>
               </div>
             </li>

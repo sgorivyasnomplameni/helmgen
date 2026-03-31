@@ -14,7 +14,7 @@ class _Chart:
     generated_yaml: str | None = None
 
 
-def test_validate_successful_chart() -> None:
+def test_validate_successful_chart(monkeypatch) -> None:
     chart = _Chart()
     chart.values_yaml = """\
 workload:
@@ -46,6 +46,8 @@ resources:
     memory: 512Mi
 """
     chart.generated_yaml = generate_chart(chart)
+
+    monkeypatch.setattr(chart_validator, "_resolve_helm_binary", lambda: None)
 
     result = validate_chart(chart)
 

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 import io
 
@@ -125,7 +125,6 @@ async def dry_run_deploy(chart_id: int, db: AsyncSession = Depends(get_db)):
 @router.get("/{chart_id}/download")
 async def download_chart(
     chart_id: int,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     chart = await db.get(Chart, chart_id)

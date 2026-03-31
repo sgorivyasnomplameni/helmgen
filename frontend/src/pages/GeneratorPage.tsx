@@ -42,6 +42,8 @@ interface DemoScenario {
   id: string
   title: string
   summary: string
+  goal: string
+  expected: string
   highlights: string[]
   config: ChartConfig
 }
@@ -49,9 +51,11 @@ interface DemoScenario {
 const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: 'landing',
-    title: 'Публичный лендинг',
-    summary: 'Простой Deployment с LoadBalancer и Ingress для внешнего доступа.',
-    highlights: ['Deployment', 'LoadBalancer', 'Ingress'],
+    title: 'Публичный веб-сервис',
+    summary: 'Сценарий внешнего HTTP-сервиса с Ingress и двумя репликами.',
+    goal: 'Показывает базовый production-подобный веб-сервис с внешним входом.',
+    expected: 'После генерации проверьте, что chart проходит lint и создаёт Service + Ingress.',
+    highlights: ['Deployment', '2 реплики', 'Ingress'],
     config: {
       appName: 'landing-page',
       version: '0.3.0',
@@ -60,7 +64,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       replicas: 2,
       containerPort: 80,
       workloadType: 'Deployment',
-      service: { enabled: true, port: 80, type: 'LoadBalancer' },
+      service: { enabled: true, port: 80, type: 'ClusterIP' },
       ingress: { enabled: true, host: 'landing.demo.local', path: '/' },
       resources: {
         enabled: true,
@@ -71,9 +75,11 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   },
   {
     id: 'api',
-    title: 'Scalable API',
-    summary: 'API-сервис с несколькими репликами, NodePort и жёсткими лимитами.',
-    highlights: ['Deployment', '4 replicas', 'NodePort'],
+    title: 'Масштабируемый API',
+    summary: 'Сервис с несколькими репликами, NodePort и зафиксированными ресурсами.',
+    goal: 'Показывает сценарий для API, который уже похож на сервис под внутреннюю платформу.',
+    expected: 'После проверки рекомендации должны быть минимальными, а chart — готовым к скачиванию.',
+    highlights: ['Deployment', '4 реплики', 'NodePort'],
     config: {
       appName: 'orders-api',
       version: '1.4.2',
@@ -93,9 +99,11 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   },
   {
     id: 'postgres',
-    title: 'Stateful база',
-    summary: 'StatefulSet для БД с внутренним сервисом ClusterIP.',
-    highlights: ['StatefulSet', 'ClusterIP', 'Persistent workload'],
+    title: 'Stateful БД для dev/test',
+    summary: 'Одиночный StatefulSet для базы с внутренним ClusterIP-сервисом.',
+    goal: 'Показывает, чем stateful-нагрузка отличается от обычного Deployment.',
+    expected: 'Рекомендации должны объяснить, что один экземпляр допустим для dev/test, но не для HA.',
+    highlights: ['StatefulSet', '1 реплика', 'ClusterIP'],
     config: {
       appName: 'postgres-db',
       version: '12.1.0',
@@ -115,9 +123,11 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   },
   {
     id: 'agent',
-    title: 'Node агент',
-    summary: 'DaemonSet для логгера или мониторинга на каждой ноде кластера.',
-    highlights: ['DaemonSet', 'No replicas', 'Internal only'],
+    title: 'Node-агент мониторинга',
+    summary: 'DaemonSet для exporter или логгера, который запускается на каждой ноде.',
+    goal: 'Показывает сценарий, где replicas не управляют числом pod, а Service часто не нужен.',
+    expected: 'После генерации проверьте, что chart не зависит от replicas и не создаёт лишний Service.',
+    highlights: ['DaemonSet', 'Без Service', 'На каждой ноде'],
     config: {
       appName: 'node-exporter',
       version: '0.8.0',
@@ -137,9 +147,11 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   },
   {
     id: 'risky',
-    title: 'Антипример для рекомендаций',
-    summary: 'Небезопасная конфигурация, чтобы увидеть предупреждения системы.',
-    highlights: ['latest tag', '1 replica', 'No limits'],
+    title: 'Рискованная конфигурация',
+    summary: 'Специальный антипример, чтобы увидеть работу предупреждений и lint-проверки.',
+    goal: 'Показывает, как система реагирует на слабые архитектурные решения.',
+    expected: 'Ожидайте несколько замечаний: latest, одна реплика, Ingress без Service и отсутствие limits.',
+    highlights: ['latest', '1 реплика', 'Без limits'],
     config: {
       appName: 'legacy-admin',
       version: '0.1.0',
@@ -713,6 +725,25 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                     <div>
                       <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)' }}>{scenario.title}</div>
                       <div style={{ marginTop: '0.25rem', fontSize: '0.77rem', lineHeight: 1.45, color: 'var(--text-muted)' }}>{scenario.summary}</div>
+                    </div>
+
+                    <div style={{ display: 'grid', gap: '0.45rem' }}>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Что показывает
+                        </div>
+                        <div style={{ marginTop: '0.15rem', fontSize: '0.75rem', lineHeight: 1.45, color: 'var(--text-soft)' }}>
+                          {scenario.goal}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Что проверить
+                        </div>
+                        <div style={{ marginTop: '0.15rem', fontSize: '0.75rem', lineHeight: 1.45, color: 'var(--text-soft)' }}>
+                          {scenario.expected}
+                        </div>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
