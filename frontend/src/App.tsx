@@ -1,7 +1,11 @@
 import { startTransition, useEffect, useState } from 'react'
+import { authApi } from '@/api/auth'
+import AuthPage from '@/pages/AuthPage'
 import GeneratorPage from '@/pages/GeneratorPage'
 import HistoryPage from '@/pages/HistoryPage'
 import OpsPage from '@/pages/OpsPage'
+import type { AuthResponse, AuthUser } from '@/types/auth'
+import { clearStoredSession, getStoredToken, getStoredUser, setStoredToken, setStoredUser } from '@/utils/auth'
 
 type View = 'generator' | 'ops' | 'history'
 type Theme = 'light' | 'dark'
@@ -9,6 +13,8 @@ type Theme = 'light' | 'dark'
 export default function App() {
   const [view, setView] = useState<View>('generator')
   const [activeChartId, setActiveChartId] = useState<number | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser())
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = window.localStorage.getItem('helmgen-theme')
     return saved === 'dark' ? 'dark' : 'light'
@@ -18,6 +24,65 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     window.localStorage.setItem('helmgen-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    const token = getStoredToken()
+    if (!token) {
+      setCurrentUser(null)
+      setAuthReady(true)
+      return
+    }
+
+    void authApi
+      .me()
+      .then(user => {
+        setStoredUser(user)
+        setCurrentUser(user)
+      })
+      .catch(() => {
+        clearStoredSession()
+        setCurrentUser(null)
+      })
+      .finally(() => setAuthReady(true))
+  }, [])
+
+  useEffect(() => {
+    function handleAuthCleared() {
+      setCurrentUser(null)
+      setActiveChartId(null)
+      setView('generator')
+    }
+
+    window.addEventListener('helmgen:auth-cleared', handleAuthCleared)
+    return () => window.removeEventListener('helmgen:auth-cleared', handleAuthCleared)
+  }, [])
+
+  function handleAuthenticated(payload: AuthResponse) {
+    setStoredToken(payload.access_token)
+    setStoredUser(payload.user)
+    setCurrentUser(payload.user)
+    setAuthReady(true)
+    setView('generator')
+  }
+
+  function handleLogout() {
+    clearStoredSession()
+    setCurrentUser(null)
+    setActiveChartId(null)
+    setView('generator')
+  }
+
+  if (!authReady) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: 'var(--text-muted)' }}>
+        Проверяем сессию...
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return <AuthPage onAuthenticated={handleAuthenticated} />
+  }
 
   return (
     <div>
@@ -50,6 +115,27 @@ export default function App() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ color: 'var(--text)', fontSize: '0.9rem', fontWeight: 700 }}>
+                {currentUser.full_name || currentUser.email}
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  marginTop: '0.1rem',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                  padding: 0,
+                }}
+              >
+                Выйти
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => {

@@ -177,6 +177,47 @@ resources:
     assert any("host" in item for item in result.errors)
 
 
+def test_ingress_without_service_validation_error() -> None:
+    chart = _Chart()
+    chart.values_yaml = """\
+workload:
+  type: Deployment
+
+replicaCount: 2
+
+image:
+  repository: demo/app
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+containerPort: 8080
+
+service:
+  enabled: false
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  host: demo.example.com
+  path: /
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+"""
+    chart.generated_yaml = generate_chart(chart)
+
+    result = validate_chart(chart)
+
+    assert result.valid is False
+    assert any("service" in item.lower() for item in result.errors)
+
+
 def test_validate_uses_helm_lint_when_available(monkeypatch) -> None:
     chart = _Chart()
     chart.values_yaml = """\

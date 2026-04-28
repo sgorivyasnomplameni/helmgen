@@ -6,6 +6,7 @@ import RecommendationsBlock from '@/components/RecommendationsBlock'
 import {
   chartsApi,
   type ChartValidationResult,
+  extractApiErrorMessage,
 } from '@/api/charts'
 import {
   generateChartYaml,
@@ -52,10 +53,10 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: 'landing',
     title: 'Публичный веб-сервис',
-    summary: 'Сценарий внешнего HTTP-сервиса с Ingress и двумя репликами.',
-    goal: 'Показывает базовый production-подобный веб-сервис с внешним входом.',
-    expected: 'После генерации проверьте, что chart проходит lint и создаёт Service + Ingress.',
-    highlights: ['Deployment', '2 реплики', 'Ingress'],
+    summary: 'Deployable-сценарий внешнего HTTP-сервиса с Ingress и двумя репликами.',
+    goal: 'Показывает базовый production-подобный веб-сервис с реальным публичным образом.',
+    expected: 'После генерации проверьте, что chart проходит lint, создаёт Service + Ingress и может быть развёрнут в minikube.',
+    highlights: ['Deployment', '2 реплики', 'Ingress', 'Deployable'],
     config: {
       appName: 'landing-page',
       version: '0.3.0',
@@ -76,19 +77,19 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: 'api',
     title: 'Масштабируемый API',
-    summary: 'Сервис с несколькими репликами, NodePort и зафиксированными ресурсами.',
-    goal: 'Показывает сценарий для API, который уже похож на сервис под внутреннюю платформу.',
-    expected: 'После проверки рекомендации должны быть минимальными, а chart — готовым к скачиванию.',
-    highlights: ['Deployment', '4 реплики', 'NodePort'],
+    summary: 'Deployable-сервис с несколькими репликами, NodePort и зафиксированными ресурсами.',
+    goal: 'Показывает API-подобный сценарий на публичном образе, который реально можно развернуть.',
+    expected: 'После проверки рекомендации должны быть минимальными, а deploy не должен упираться в недоступный image.',
+    highlights: ['Deployment', '4 реплики', 'NodePort', 'Deployable'],
     config: {
       appName: 'orders-api',
       version: '1.4.2',
-      image: 'company/orders-api',
-      imageTag: '2.8.1',
+      image: 'traefik/whoami',
+      imageTag: 'v1.10.3',
       replicas: 4,
-      containerPort: 8080,
+      containerPort: 80,
       workloadType: 'Deployment',
-      service: { enabled: true, port: 8080, type: 'NodePort' },
+      service: { enabled: true, port: 80, type: 'NodePort' },
       ingress: { enabled: false, host: 'orders.demo.local', path: '/' },
       resources: {
         enabled: true,
@@ -100,20 +101,20 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: 'postgres',
     title: 'Stateful БД для dev/test',
-    summary: 'Одиночный StatefulSet для базы с внутренним ClusterIP-сервисом.',
-    goal: 'Показывает, чем stateful-нагрузка отличается от обычного Deployment.',
-    expected: 'Рекомендации должны объяснить, что один экземпляр допустим для dev/test, но не для HA.',
-    highlights: ['StatefulSet', '1 реплика', 'ClusterIP'],
+    summary: 'Deployable StatefulSet с Redis и внутренним ClusterIP-сервисом.',
+    goal: 'Показывает, чем stateful-нагрузка отличается от обычного Deployment, не упираясь в обязательные env для БД.',
+    expected: 'Рекомендации должны объяснить, что один экземпляр допустим для dev/test, а deploy должен проходить на публичном образе.',
+    highlights: ['StatefulSet', '1 реплика', 'ClusterIP', 'Deployable'],
     config: {
-      appName: 'postgres-db',
-      version: '12.1.0',
-      image: 'postgres',
-      imageTag: '16.4',
+      appName: 'redis-cache',
+      version: '7.4.0',
+      image: 'redis',
+      imageTag: '7.4.2',
       replicas: 1,
-      containerPort: 5432,
+      containerPort: 6379,
       workloadType: 'StatefulSet',
-      service: { enabled: true, port: 5432, type: 'ClusterIP' },
-      ingress: { enabled: false, host: 'postgres.demo.local', path: '/' },
+      service: { enabled: true, port: 6379, type: 'ClusterIP' },
+      ingress: { enabled: false, host: 'redis.demo.local', path: '/' },
       resources: {
         enabled: true,
         requests: { cpu: '300m', memory: '512Mi' },
@@ -124,10 +125,10 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: 'agent',
     title: 'Node-агент мониторинга',
-    summary: 'DaemonSet для exporter или логгера, который запускается на каждой ноде.',
+    summary: 'Deployable DaemonSet для exporter, который запускается на каждой ноде.',
     goal: 'Показывает сценарий, где replicas не управляют числом pod, а Service часто не нужен.',
-    expected: 'После генерации проверьте, что chart не зависит от replicas и не создаёт лишний Service.',
-    highlights: ['DaemonSet', 'Без Service', 'На каждой ноде'],
+    expected: 'После генерации проверьте, что chart не зависит от replicas, не создаёт лишний Service и разворачивается без проблем с образом.',
+    highlights: ['DaemonSet', 'Без Service', 'На каждой ноде', 'Deployable'],
     config: {
       appName: 'node-exporter',
       version: '0.8.0',
@@ -148,19 +149,19 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: 'risky',
     title: 'Рискованная конфигурация',
-    summary: 'Специальный антипример, чтобы увидеть работу предупреждений и lint-проверки.',
-    goal: 'Показывает, как система реагирует на слабые архитектурные решения.',
-    expected: 'Ожидайте несколько замечаний: latest, одна реплика, Ingress без Service и отсутствие limits.',
-    highlights: ['latest', '1 реплика', 'Без limits'],
+    summary: 'Антипример на реальном образе: deployable, но с плохими архитектурными решениями.',
+    goal: 'Показывает, как система реагирует на слабые решения, не упираясь в несуществующий image.',
+    expected: 'Ожидайте несколько замечаний: latest, одна реплика, Ingress без Service и отсутствие limits. Сам pod при этом должен стартовать.',
+    highlights: ['latest', '1 реплика', 'Без limits', 'Deployable'],
     config: {
       appName: 'legacy-admin',
       version: '0.1.0',
-      image: 'legacy/admin-panel',
+      image: 'nginx',
       imageTag: 'latest',
       replicas: 1,
-      containerPort: 3000,
+      containerPort: 80,
       workloadType: 'Deployment',
-      service: { enabled: false, port: 3000, type: 'ClusterIP' },
+      service: { enabled: false, port: 80, type: 'ClusterIP' },
       ingress: { enabled: true, host: 'legacy.demo.local', path: '/' },
       resources: {
         enabled: false,
@@ -295,6 +296,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   const [isDraftDirty, setIsDraftDirty] = useState(false)
   const [validation, setValidation] = useState<ChartValidationResult | null>(null)
   const [isValidating, setIsValidating] = useState(false)
+  const [actionNote, setActionNote] = useState<{ tone: 'neutral' | 'success' | 'error'; text: string } | null>(null)
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('preview')
   const [previewTab, setPreviewTab] = useState<YamlTab>('deployment.yaml')
   const [showScenarios, setShowScenarios] = useState(false)
@@ -302,6 +304,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
   function resetGenerationState() {
     setStatus('idle')
+    setActionNote(null)
     if (generatedChartId) {
       setIsDraftDirty(true)
     }
@@ -416,12 +419,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
   function handleDownload() {
     if (!generatedChartId) return
-    const a = document.createElement('a')
-    a.href = chartsApi.downloadUrl(generatedChartId)
-    a.download = `${config.appName}-${config.version}.tgz`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    void chartsApi.download(generatedChartId, `${config.appName}-${config.version}.tgz`)
   }
 
   async function handleGenerate() {
@@ -433,6 +431,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
     setFormErrors({})
     setStatus('loading')
+    setActionNote({ tone: 'neutral', text: 'Собираем Helm-чарт и сохраняем его в истории...' })
     setValidation(null)
     setWorkspaceSection('preview')
 
@@ -452,9 +451,14 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       setIsDraftDirty(false)
       onChartReady?.(generatedChart.id)
       setStatus('success')
-    } catch {
+      setActionNote({ tone: 'success', text: `Чарт ${generatedChart.name} успешно собран. Теперь его можно проверить или скачать.` })
+    } catch (error) {
       setStatus('error')
-      setTimeout(() => setStatus('idle'), 3000)
+      setActionNote({
+        tone: 'error',
+        text: extractApiErrorMessage(error, 'Не удалось собрать chart. Проверьте состояние backend и попробуйте снова.'),
+      })
+      window.setTimeout(() => setStatus('idle'), 3000)
     }
   }
 
@@ -462,10 +466,15 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     if (!generatedChartId) return
     setIsValidating(true)
     setWorkspaceSection('lint')
+    setActionNote({ tone: 'neutral', text: 'Запускаем helm lint для текущего chart...' })
     try {
       const result = await chartsApi.validate(generatedChartId)
       setValidation(result)
-    } catch {
+      setActionNote({
+        tone: result.valid ? 'success' : 'error',
+        text: result.summary,
+      })
+    } catch (error) {
       setValidation({
         valid: false,
         errors: ['Не удалось выполнить проверку чарта'],
@@ -473,6 +482,10 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         checks: [],
         engine: 'builtin',
         summary: 'Проверка завершилась с ошибкой запроса',
+      })
+      setActionNote({
+        tone: 'error',
+        text: extractApiErrorMessage(error, 'Не удалось выполнить проверку чарта.'),
       })
     } finally {
       setIsValidating(false)
@@ -956,6 +969,38 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
               ? 'Исправьте ошибки в форме, чтобы перейти к генерации Helm-чарта.'
               : latestResultSummary}
           </div>
+
+          {actionNote && (
+            <div
+              style={{
+                padding: '0.8rem 0.95rem',
+                borderRadius: '0.8rem',
+                background:
+                  actionNote.tone === 'success'
+                    ? 'var(--success-soft)'
+                    : actionNote.tone === 'error'
+                      ? 'var(--danger-soft)'
+                      : 'var(--panel-strong)',
+                color:
+                  actionNote.tone === 'success'
+                    ? 'var(--success)'
+                    : actionNote.tone === 'error'
+                      ? 'var(--danger)'
+                      : 'var(--text-soft)',
+                border:
+                  actionNote.tone === 'success'
+                    ? '1px solid color-mix(in srgb, var(--success) 30%, transparent)'
+                    : actionNote.tone === 'error'
+                      ? '1px solid color-mix(in srgb, var(--danger) 30%, transparent)'
+                      : '1px solid var(--border)',
+                fontSize: '0.84rem',
+                lineHeight: 1.5,
+                fontWeight: 600,
+              }}
+            >
+              {actionNote.text}
+            </div>
+          )}
         </div>
 
         <div ref={formCardRef} style={card}>

@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     debug: bool = False
 
     database_url: str
+    auth_secret_key: str = "helmgen-dev-secret-key"
+    auth_token_ttl_minutes: int = 60 * 24
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

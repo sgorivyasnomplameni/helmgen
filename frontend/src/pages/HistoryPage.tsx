@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
-import { chartsApi } from '@/api/charts'
+import AuditList from '@/components/AuditList'
+import { auditApi } from '@/api/audit'
+import { chartsApi, extractApiErrorMessage } from '@/api/charts'
+import type { AuditEvent } from '@/types/audit'
 import type { Chart } from '@/types/chart'
 
 const pageShell: React.CSSProperties = {
@@ -34,6 +37,27 @@ function formatDate(value: string): string {
   })
 }
 
+function formatLifecycleStatus(value: string): string {
+  switch (value) {
+    case 'draft':
+      return 'Черновик'
+    case 'generated':
+      return 'Сгенерирован'
+    case 'validated':
+      return 'Проверен'
+    case 'templated':
+      return 'Отрендерен'
+    case 'dry_run_ready':
+      return 'Dry-run пройден'
+    case 'deployed':
+      return 'Развернут'
+    case 'undeployed':
+      return 'Release удалён'
+    default:
+      return value
+  }
+}
+
 interface Props {
   active?: boolean
   onOpenOps?: (chartId: number) => void
@@ -41,18 +65,30 @@ interface Props {
 
 export default function HistoryPage({ active = true, onOpenOps }: Props) {
   const [charts, setCharts] = useState<Chart[]>([])
+  const [recentEvents, setRecentEvents] = useState<AuditEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [actionNote, setActionNote] = useState<{ tone: 'neutral' | 'success' | 'error'; text: string } | null>(null)
 
   async function loadCharts() {
     setLoading(true)
     setError(null)
+    setActionNote({ tone: 'neutral', text: 'Загружаем историю Helm-чартов...' })
     try {
-      const data = await chartsApi.list()
+      const [data, events] = await Promise.all([chartsApi.list(), auditApi.recent(8)])
       setCharts(data)
-    } catch {
-      setError('Не удалось загрузить историю чартов')
+      setRecentEvents(events)
+      setActionNote({
+        tone: 'success',
+        text: data.length > 0 ? `История обновлена: ${data.length} chart(ов).` : 'История загружена. Пока записей нет.',
+      })
+    } catch (error) {
+      setError(extractApiErrorMessage(error, 'Не удалось загрузить историю чартов'))
+      setActionNote({
+        tone: 'error',
+        text: extractApiErrorMessage(error, 'Не удалось загрузить историю чартов'),
+      })
     } finally {
       setLoading(false)
     }
@@ -66,23 +102,25 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
 
   async function handleDelete(chartId: number) {
     setDeletingId(chartId)
+    setError(null)
+    setActionNote({ tone: 'neutral', text: 'Удаляем chart из истории...' })
     try {
       await chartsApi.delete(chartId)
       setCharts(prev => prev.filter(chart => chart.id !== chartId))
-    } catch {
-      setError('Не удалось удалить чарт')
+      const events = await auditApi.recent(8)
+      setRecentEvents(events)
+      setActionNote({ tone: 'success', text: 'Chart удалён из истории.' })
+    } catch (error) {
+      const message = extractApiErrorMessage(error, 'Не удалось удалить чарт')
+      setError(message)
+      setActionNote({ tone: 'error', text: message })
     } finally {
       setDeletingId(null)
     }
   }
 
   function handleDownload(chartId: number, name: string, version: string) {
-    const a = document.createElement('a')
-    a.href = chartsApi.downloadUrl(chartId)
-    a.download = `${name}-${version}.tgz`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    void chartsApi.download(chartId, `${name}-${version}.tgz`)
   }
 
   return (
@@ -96,7 +134,15 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
         </p>
       </div>
 
-      <div style={{ ...card, padding: '1rem' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1.8fr) minmax(320px, 0.95fr)',
+          gap: '1rem',
+          alignItems: 'start',
+        }}
+      >
+        <div style={{ ...card, padding: '1rem' }}>
         <div
           style={{
             display: 'flex',
@@ -143,6 +189,32 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
           </div>
         )}
 
+        {actionNote && (
+          <div
+            style={{
+              marginBottom: '1rem',
+              padding: '0.85rem 1rem',
+              borderRadius: '0.8rem',
+              background:
+                actionNote.tone === 'success'
+                  ? 'var(--success-soft)'
+                  : actionNote.tone === 'error'
+                    ? 'var(--danger-soft)'
+                    : 'var(--panel-muted)',
+              color:
+                actionNote.tone === 'success'
+                  ? 'var(--success)'
+                  : actionNote.tone === 'error'
+                    ? 'var(--danger)'
+                    : 'var(--text-soft)',
+              border: '1px solid var(--border)',
+              fontWeight: 600,
+            }}
+          >
+            {actionNote.text}
+          </div>
+        )}
+
         {loading ? (
           <div style={{ padding: '1.5rem', color: 'var(--text-muted)', textAlign: 'center' }}>
             Загружаем историю...
@@ -164,6 +236,8 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
           <div style={{ display: 'grid', gap: '0.9rem' }}>
             {charts.map(chart => {
               const isGenerated = Boolean(chart.generated_yaml)
+              const isDeployed = chart.deploy_status === 'passed'
+              const hasDryRun = Boolean(chart.dry_run_status)
               return (
                 <div
                   key={chart.id}
@@ -192,8 +266,22 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                           color: isGenerated ? 'var(--success)' : 'var(--warning)',
                         }}
                       >
-                        {isGenerated ? 'Сгенерирован' : 'Черновик'}
+                        {formatLifecycleStatus(chart.lifecycle_status || (isGenerated ? 'generated' : 'draft'))}
                       </span>
+                      {isDeployed && (
+                        <span
+                          style={{
+                            padding: '0.25rem 0.55rem',
+                            borderRadius: '999px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            background: 'var(--accent-soft)',
+                            color: 'var(--accent-contrast)',
+                          }}
+                        >
+                          {chart.deployed_namespace || 'default'} / {chart.deployed_release_name || chart.name}
+                        </span>
+                      )}
                     </div>
                     <div style={{ marginTop: '0.45rem', color: 'var(--text-soft)', fontSize: '0.88rem' }}>
                       {chart.description || 'Описание не указано'}
@@ -201,7 +289,10 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                     <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                       <span>Chart: {chart.chart_version}</span>
                       <span>App: {chart.app_version}</span>
+                      {chart.validation_status && <span>Lint: {chart.validation_status === 'passed' ? 'ok' : 'ошибка'}</span>}
+                      {hasDryRun && <span>Dry-run: {chart.dry_run_status === 'passed' ? 'ok' : 'ошибка'}</span>}
                       <span>Создан: {formatDate(chart.created_at)}</span>
+                      {chart.deployed_at && <span>Deploy: {formatDate(chart.deployed_at)}</span>}
                     </div>
                   </div>
 
@@ -252,6 +343,13 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
             })}
           </div>
         )}
+        </div>
+
+        <AuditList
+          title="Последние действия"
+          events={recentEvents}
+          emptyText="После генерации, проверки и deploy здесь появится краткий журнал действий."
+        />
       </div>
     </div>
   )

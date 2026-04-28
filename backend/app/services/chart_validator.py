@@ -77,9 +77,12 @@ def _builtin_validate(chart) -> ValidationResult:
 
     if ingress_enabled:
         ingress_host = ingress_section.get("host", "") if isinstance(ingress_section, dict) else ""
-        if not ingress_host or ingress_host == '""':
+        has_ingress_host = bool(ingress_host and ingress_host != '""')
+        if not has_ingress_host:
             errors.append("Для включённого ingress должен быть задан host")
-        else:
+        if not service_enabled:
+            errors.append("Ingress требует включённый service, так как маршрут ссылается на backend service")
+        if has_ingress_host and service_enabled:
             checks.append("Ingress включён и содержит host")
     elif ingress_section is not None:
         checks.append("Ingress отключён в values.yaml")

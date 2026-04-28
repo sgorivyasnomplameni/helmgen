@@ -38,12 +38,7 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
 
   const handleDownload = () => {
     if (!chartId) return
-    const a = document.createElement('a')
-    a.href = chartsApi.downloadUrl(chartId)
-    a.download = `${chartName ?? 'chart'}-${chartVersion ?? '0.1.0'}.tgz`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    void chartsApi.download(chartId, `${chartName ?? 'chart'}-${chartVersion ?? '0.1.0'}.tgz`)
   }
 
   useEffect(() => {

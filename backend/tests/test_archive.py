@@ -130,6 +130,85 @@ def test_daemonset_deployment_template_uses_daemonset_kind() -> None:
     assert "replicas:" not in content
 
 
+def test_generate_deployment_chart() -> None:
+    c = _Chart()
+    c.values_yaml = (
+        "workload:\n"
+        "  type: Deployment\n"
+        "replicaCount: 3\n"
+        "image:\n"
+        "  repository: nginx\n"
+        "  pullPolicy: IfNotPresent\n"
+        '  tag: "1.25"\n'
+        "service:\n"
+        "  enabled: true\n"
+        "  type: ClusterIP\n"
+        "  port: 80\n"
+        "ingress:\n"
+        "  enabled: false\n"
+        "resources: {}\n"
+    )
+    c.generated_yaml = generate_chart(c)
+
+    archive = build_chart_archive(c)
+    deployment = _read(archive, "myapp/templates/deployment.yaml")
+    values = _read(archive, "myapp/values.yaml")
+    assert "kind: Deployment" in deployment
+    assert "replicas: {{ .Values.replicaCount }}" in deployment
+    assert "replicaCount: 3" in values
+    assert "myapp/templates/service.yaml" in _names(archive)
+
+
+def test_generate_statefulset_chart() -> None:
+    c = _Chart()
+    c.values_yaml = (
+        "workload:\n"
+        "  type: StatefulSet\n"
+        "replicaCount: 2\n"
+        "image:\n"
+        "  repository: postgres\n"
+        "  pullPolicy: IfNotPresent\n"
+        '  tag: "16"\n'
+        "service:\n"
+        "  enabled: true\n"
+        "  type: ClusterIP\n"
+        "  port: 5432\n"
+        "ingress:\n"
+        "  enabled: false\n"
+        "resources: {}\n"
+    )
+    c.generated_yaml = generate_chart(c)
+
+    content = _read(build_chart_archive(c), "myapp/templates/deployment.yaml")
+    assert "kind: StatefulSet" in content
+    assert "replicas: {{ .Values.replicaCount }}" in content
+
+
+def test_generate_daemonset_without_replicas() -> None:
+    c = _Chart()
+    c.values_yaml = (
+        "workload:\n"
+        "  type: DaemonSet\n"
+        "replicaCount: 4\n"
+        "image:\n"
+        "  repository: fluent/fluent-bit\n"
+        "  pullPolicy: IfNotPresent\n"
+        '  tag: "2.2"\n'
+        "service:\n"
+        "  enabled: false\n"
+        "  type: ClusterIP\n"
+        "  port: 2020\n"
+        "ingress:\n"
+        "  enabled: false\n"
+        "resources: {}\n"
+    )
+    c.generated_yaml = generate_chart(c)
+
+    content = _read(build_chart_archive(c), "myapp/templates/deployment.yaml")
+    assert "kind: DaemonSet" in content
+    assert "replicas:" not in content
+
+
 def test_ingress_absent_when_disabled_even_if_block_exists() -> None:
     c = _Chart()
     c.values_yaml = (
@@ -333,3 +412,14 @@ def test_archive_uses_chart_name_as_root_dir() -> None:
     names = _names(build_chart_archive(c))
     assert any(n.startswith("awesome-service/") for n in names)
     assert not any(n.startswith("myapp/") for n in names)
+
+
+def test_download_chart_archive_contains_expected_files(chart: _Chart) -> None:
+    names = set(_names(build_chart_archive(chart)))
+    assert {
+        "myapp/Chart.yaml",
+        "myapp/values.yaml",
+        "myapp/templates/_helpers.tpl",
+        "myapp/templates/deployment.yaml",
+        "myapp/templates/service.yaml",
+    }.issubset(names)

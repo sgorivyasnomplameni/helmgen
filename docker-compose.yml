@@ -25,10 +25,15 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       HELM_BIN: ${HELM_BIN:-/app/.tools/bin/helm}
+      KUBECONFIG: ${HOME}/.kube/config
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ${HOME}/.kube:${HOME}/.kube:ro
+      - ${HOME}/.minikube:${HOME}/.minikube:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
