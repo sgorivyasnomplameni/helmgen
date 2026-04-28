@@ -6,6 +6,7 @@ import {
   type ChartDeployResult,
   type ChartDryRunResult,
   type ChartMonitoringResult,
+  type ChartReleaseHistoryResult,
   type ChartReleaseStatusResult,
   type ChartRollbackResult,
   type ChartTemplateResult,
@@ -17,7 +18,7 @@ import type { AuditEvent } from '@/types/audit'
 import type { Chart } from '@/types/chart'
 
 type OpsTab = 'template' | 'dry-run' | 'deploy' | 'monitoring' | 'rollback' | 'uninstall'
-type OperationKey = OpsTab | 'release-status'
+type OperationKey = OpsTab | 'release-status' | 'release-history'
 
 interface OperationRuntime {
   key: OperationKey
@@ -171,6 +172,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
   const [deployResult, setDeployResult] = useState<ChartDeployResult | null>(null)
   const [releaseStatusResult, setReleaseStatusResult] = useState<ChartReleaseStatusResult | null>(null)
   const [monitoringResult, setMonitoringResult] = useState<ChartMonitoringResult | null>(null)
+  const [releaseHistoryResult, setReleaseHistoryResult] = useState<ChartReleaseHistoryResult | null>(null)
   const [rollbackResult, setRollbackResult] = useState<ChartRollbackResult | null>(null)
   const [uninstallResult, setUninstallResult] = useState<ChartUninstallResult | null>(null)
   const [currentOperation, setCurrentOperation] = useState<OperationRuntime | null>(null)
@@ -233,6 +235,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
     setDeployResult(null)
     setReleaseStatusResult(null)
     setMonitoringResult(null)
+    setReleaseHistoryResult(null)
     setRollbackResult(null)
     setUninstallResult(null)
     setCurrentOperation(null)
@@ -308,6 +311,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
       ? 'Backend отправил команду helm upgrade --install и ждёт ответ от Kubernetes.'
       : activeOperation === 'monitoring'
         ? 'Backend собирает статус release, Kubernetes-ресурсы и события namespace.'
+      : activeOperation === 'release-history'
+        ? 'Backend запрашивает список Helm-ревизий, доступных для отката.'
       : activeOperation === 'rollback'
         ? 'Backend выполняет helm rollback для выбранного release.'
       : activeOperation === 'release-status'
@@ -332,6 +337,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
   const isDryRunning = activeOperation === 'dry-run'
   const isDeploying = activeOperation === 'deploy'
   const isMonitoring = activeOperation === 'monitoring'
+  const isLoadingReleaseHistory = activeOperation === 'release-history'
   const isRollingBack = activeOperation === 'rollback'
   const isCheckingReleaseStatus = activeOperation === 'release-status'
   const isUninstalling = activeOperation === 'uninstall'
@@ -513,6 +519,37 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
       }
       setMonitoringResult(failedResult)
       finishOperation('monitoring', 'Мониторинг release', 'error', failedResult.summary)
+    }
+  }
+
+  async function handleReleaseHistory() {
+    if (!activeChartId) return
+    startOperation('release-history', 'Получаем историю Helm release')
+    setTab('rollback')
+    setReleaseHistoryResult(null)
+    try {
+      const result = await chartsApi.releaseHistory(activeChartId, {
+        namespace: namespace.trim() || chart?.deployed_namespace || 'helmgen-demo',
+        release_name: releaseName.trim() || chart?.deployed_release_name || chart?.name || undefined,
+      })
+      setReleaseHistoryResult(result)
+      const events = await auditApi.chart(activeChartId)
+      setAuditEvents(events)
+      finishOperation('release-history', 'История Helm release', result.success ? 'success' : 'error', result.summary)
+    } catch (error) {
+      const failedResult = {
+        success: false,
+        release_name: releaseName.trim() || chart?.deployed_release_name || chart?.name || 'release',
+        namespace: namespace.trim() || chart?.deployed_namespace || 'helmgen-demo',
+        entries: [],
+        output: '',
+        errors: [extractApiErrorMessage(error, 'Не удалось получить историю Helm release')],
+        warnings: [],
+        engine: 'helm_history',
+        summary: extractApiErrorMessage(error, 'Запрос истории Helm release завершился с ошибкой'),
+      }
+      setReleaseHistoryResult(failedResult)
+      finishOperation('release-history', 'История Helm release', 'error', failedResult.summary)
     }
   }
 
@@ -764,6 +801,20 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             }}
           >
             {isMonitoring ? 'Сбор...' : 'Мониторинг'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleReleaseHistory()}
+            disabled={isLoadingReleaseHistory || !clusterReady}
+            style={{
+              ...actionButton,
+              border: '1px solid var(--border)',
+              background: 'var(--panel-strong)',
+              color: isLoadingReleaseHistory || !clusterReady ? 'var(--text-muted)' : 'var(--text-soft)',
+              cursor: isLoadingReleaseHistory || !clusterReady ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isLoadingReleaseHistory ? 'История...' : 'История Helm'}
           </button>
           <button
             type="button"
@@ -1501,43 +1552,123 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                   >
                     <Spinner label="Выполняем helm rollback..." />
                   </div>
-                ) : !rollbackResult ? (
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Rollback ещё не запускался. Для запуска нужно подтверждение слева.</div>
                 ) : (
                   <>
                     <div
                       style={{
                         marginBottom: '1rem',
-                        padding: '0.85rem 1rem',
+                        padding: '0.9rem 1rem',
                         borderRadius: '0.8rem',
-                        background: rollbackResult.success ? '#14532d' : '#312e81',
-                        border: `1px solid ${rollbackResult.success ? '#22c55e' : '#8b5cf6'}`,
-                        color: rollbackResult.success ? '#dcfce7' : '#ddd6fe',
-                        fontSize: '0.84rem',
-                        lineHeight: 1.55,
+                        background: 'rgba(15, 23, 42, 0.35)',
+                        border: '1px solid rgba(148, 163, 184, 0.2)',
                       }}
                     >
-                      Release <strong>{rollbackResult.release_name}</strong> в namespace <strong>{rollbackResult.namespace}</strong>
-                      {rollbackResult.success ? ' успешно откатан.' : ' не удалось откатить.'}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ color: '#e2e8f0', fontSize: '0.88rem', fontWeight: 800 }}>
+                          Доступные ревизии для rollback
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleReleaseHistory()}
+                          disabled={isLoadingReleaseHistory || !clusterReady}
+                          style={{
+                            border: '1px solid rgba(148, 163, 184, 0.25)',
+                            background: 'rgba(30, 41, 59, 0.85)',
+                            color: isLoadingReleaseHistory ? '#64748b' : '#e2e8f0',
+                            borderRadius: '999px',
+                            padding: '0.4rem 0.7rem',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: isLoadingReleaseHistory || !clusterReady ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {isLoadingReleaseHistory ? 'Обновляем...' : 'Обновить историю'}
+                        </button>
+                      </div>
+                      <div style={{ marginTop: '0.45rem', color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                        {releaseHistoryResult?.summary || 'Сначала загрузите Helm history, чтобы выбрать ревизию перед откатом.'}
+                      </div>
+                      {releaseHistoryResult?.errors.length ? (
+                        <ul style={{ margin: '0.8rem 0 0', paddingLeft: '1.1rem', color: '#fecaca' }}>
+                          {releaseHistoryResult.errors.map(item => <li key={item} style={{ marginBottom: '0.3rem' }}>{item}</li>)}
+                        </ul>
+                      ) : null}
+                      {releaseHistoryResult?.warnings.length ? (
+                        <ul style={{ margin: '0.8rem 0 0', paddingLeft: '1.1rem', color: '#fde68a' }}>
+                          {releaseHistoryResult.warnings.map(item => <li key={item} style={{ marginBottom: '0.3rem' }}>{item}</li>)}
+                        </ul>
+                      ) : null}
+                      {releaseHistoryResult?.entries.length ? (
+                        <div style={{ marginTop: '0.9rem', display: 'grid', gap: '0.55rem' }}>
+                          {releaseHistoryResult.entries.map(entry => (
+                            <button
+                              key={`${entry.revision}-${entry.updated ?? ''}`}
+                              type="button"
+                              onClick={() => setRollbackRevision(String(entry.revision))}
+                              style={{
+                                textAlign: 'left',
+                                border: rollbackRevision.trim() === String(entry.revision) ? '1px solid #f59e0b' : '1px solid rgba(148, 163, 184, 0.15)',
+                                background: rollbackRevision.trim() === String(entry.revision) ? 'rgba(245, 158, 11, 0.12)' : 'rgba(15, 23, 42, 0.5)',
+                                borderRadius: '0.8rem',
+                                padding: '0.75rem 0.85rem',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                <span style={{ color: '#f8fafc', fontWeight: 800 }}>Revision {entry.revision}</span>
+                                <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{entry.status || 'unknown'}</span>
+                              </div>
+                              <div style={{ marginTop: '0.28rem', color: '#cbd5e1', fontSize: '0.8rem', lineHeight: 1.55 }}>
+                                {entry.description || 'Описание ревизии не указано'}
+                              </div>
+                              <div style={{ marginTop: '0.28rem', color: '#94a3b8', fontSize: '0.76rem', lineHeight: 1.5 }}>
+                                {entry.updated || 'Время не указано'}{entry.chart ? ` · ${entry.chart}` : ''}{entry.app_version ? ` · App ${entry.app_version}` : ''}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-                    {rollbackResult.errors.length > 0 && (
-                      <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
-                        {rollbackResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
-                      </ul>
+
+                    {!rollbackResult ? (
+                      <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Rollback ещё не запускался. Для запуска нужно подтверждение слева.</div>
+                    ) : (
+                      <>
+                        <div
+                          style={{
+                            marginBottom: '1rem',
+                            padding: '0.85rem 1rem',
+                            borderRadius: '0.8rem',
+                            background: rollbackResult.success ? '#14532d' : '#312e81',
+                            border: `1px solid ${rollbackResult.success ? '#22c55e' : '#8b5cf6'}`,
+                            color: rollbackResult.success ? '#dcfce7' : '#ddd6fe',
+                            fontSize: '0.84rem',
+                            lineHeight: 1.55,
+                          }}
+                        >
+                          Release <strong>{rollbackResult.release_name}</strong> в namespace <strong>{rollbackResult.namespace}</strong>
+                          {rollbackResult.success ? ' успешно откатан.' : ' не удалось откатить.'}
+                        </div>
+                        {rollbackResult.errors.length > 0 && (
+                          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
+                            {rollbackResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
+                          </ul>
+                        )}
+                        <pre
+                          style={{
+                            margin: 0,
+                            fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                            fontSize: '0.78rem',
+                            lineHeight: 1.7,
+                            color: rollbackResult.success ? '#fef3c7' : '#fecaca',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {rollbackResult.output || '# Rollback не вернул вывод'}
+                        </pre>
+                      </>
                     )}
-                    <pre
-                      style={{
-                        margin: 0,
-                        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                        fontSize: '0.78rem',
-                        lineHeight: 1.7,
-                        color: rollbackResult.success ? '#fef3c7' : '#fecaca',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {rollbackResult.output || '# Rollback не вернул вывод'}
-                    </pre>
                   </>
                 )}
               </div>

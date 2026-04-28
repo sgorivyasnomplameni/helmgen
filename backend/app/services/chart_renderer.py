@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -63,6 +64,27 @@ class MonitoringResult(BaseModel):
     warnings: list[str]
     status: str = ""
     engine: str = "helm_status_kubectl"
+    summary: str = ""
+
+
+class ReleaseHistoryEntry(BaseModel):
+    revision: int
+    updated: str | None = None
+    status: str | None = None
+    chart: str | None = None
+    app_version: str | None = None
+    description: str | None = None
+
+
+class ReleaseHistoryResult(BaseModel):
+    success: bool
+    release_name: str
+    namespace: str
+    entries: list[ReleaseHistoryEntry]
+    output: str
+    errors: list[str]
+    warnings: list[str]
+    engine: str = "helm_history"
     summary: str = ""
 
 
@@ -805,6 +827,126 @@ def monitor_release_chart(chart, namespace: str, release_name: str | None = None
             if success
             else "Мониторинг release выявил ошибки или недоступные Kubernetes-ресурсы"
         ),
+    )
+
+
+def release_history_chart(chart, namespace: str, release_name: str | None = None) -> ReleaseHistoryResult:
+    helm_bin = _resolve_helm_binary()
+    final_release_name = release_name or getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release"
+    if not helm_bin:
+        return ReleaseHistoryResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=namespace,
+            entries=[],
+            output="",
+            errors=["Helm CLI не найден в окружении backend"],
+            warnings=["Установите Helm или укажите путь через HELM_BIN для просмотра истории release"],
+            engine="helm_history",
+            summary="История Helm недоступна без Helm CLI",
+        )
+
+    command = [helm_bin, "history", final_release_name, "--namespace", namespace, "-o", "json"]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return ReleaseHistoryResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=namespace,
+            entries=[],
+            output="",
+            errors=[f"Не удалось получить историю release: {exc}"],
+            warnings=[],
+            engine="helm_history",
+            summary="Запрос истории Helm завершился ошибкой запуска Helm CLI",
+        )
+
+    stderr_lines = _clean_lines(completed.stderr)
+    combined_output = "\n".join(part for part in [completed.stdout.strip(), completed.stderr.strip()] if part)
+
+    if _infrastructure_error(completed.stderr):
+        return ReleaseHistoryResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=namespace,
+            entries=[],
+            output=combined_output,
+            errors=["Helm CLI найден, но не смог подключиться к Kubernetes"],
+            warnings=stderr_lines,
+            engine="helm_history",
+            summary="История Helm недоступна из-за проблемы окружения",
+        )
+
+    if completed.returncode != 0:
+        return ReleaseHistoryResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=namespace,
+            entries=[],
+            output=combined_output,
+            errors=stderr_lines or ["helm history завершился с ошибкой"],
+            warnings=[],
+            engine="helm_history",
+            summary="Helm history завершился с ошибкой",
+        )
+
+    try:
+        raw_entries = json.loads(completed.stdout or "[]")
+    except json.JSONDecodeError:
+        return ReleaseHistoryResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=namespace,
+            entries=[],
+            output=combined_output,
+            errors=["Helm history вернул неожиданный формат ответа"],
+            warnings=[],
+            engine="helm_history",
+            summary="Не удалось разобрать историю Helm release",
+        )
+
+    entries: list[ReleaseHistoryEntry] = []
+    for item in raw_entries if isinstance(raw_entries, list) else []:
+        if not isinstance(item, dict):
+            continue
+        revision_raw = item.get("revision")
+        try:
+            revision = int(revision_raw)
+        except (TypeError, ValueError):
+            continue
+        entries.append(
+            ReleaseHistoryEntry(
+                revision=revision,
+                updated=str(item.get("updated")) if item.get("updated") is not None else None,
+                status=str(item.get("status")) if item.get("status") is not None else None,
+                chart=str(item.get("chart")) if item.get("chart") is not None else None,
+                app_version=str(item.get("app_version")) if item.get("app_version") is not None else None,
+                description=str(item.get("description")) if item.get("description") is not None else None,
+            )
+        )
+
+    entries.sort(key=lambda entry: entry.revision, reverse=True)
+    warnings: list[str] = []
+    if not entries:
+        warnings.append("Helm history не вернул ревизии для выбранного release")
+
+    return ReleaseHistoryResult(
+        success=True,
+        release_name=final_release_name,
+        namespace=namespace,
+        entries=entries,
+        output=completed.stdout.strip(),
+        errors=[],
+        warnings=warnings + stderr_lines,
+        engine="helm_history",
+        summary="История Helm release получена" if entries else "История Helm release пуста",
     )
 
 

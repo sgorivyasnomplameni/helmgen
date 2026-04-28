@@ -6,6 +6,7 @@ from app.services.chart_renderer import (
     dry_run_deploy_chart,
     get_cluster_status,
     monitor_release_chart,
+    release_history_chart,
     release_status_chart,
     render_chart_template,
     rollback_chart,
@@ -303,6 +304,47 @@ def test_monitor_release_warns_when_kubectl_missing(monkeypatch) -> None:
     assert result.success is True
     assert any("kubectl" in item for item in result.warnings)
     assert "# helm status" in result.output
+
+
+def test_release_history_returns_revisions(monkeypatch) -> None:
+    chart = _build_chart()
+    monkeypatch.setattr(chart_renderer, "_resolve_helm_binary", lambda: "/usr/bin/helm")
+    monkeypatch.setattr(
+        chart_renderer.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout=(
+                '[{"revision":1,"updated":"2026-04-28 10:00:00","status":"superseded","chart":"demo-0.1.0",'
+                '"app_version":"1.0.0","description":"Install complete"},'
+                '{"revision":2,"updated":"2026-04-29 09:15:00","status":"deployed","chart":"demo-0.1.1",'
+                '"app_version":"1.0.1","description":"Upgrade complete"}]'
+            ),
+            stderr="",
+        ),
+    )
+
+    result = release_history_chart(chart, namespace="demo", release_name="demo-release")
+
+    assert result.success is True
+    assert result.engine == "helm_history"
+    assert [entry.revision for entry in result.entries] == [2, 1]
+    assert result.entries[0].status == "deployed"
+
+
+def test_release_history_returns_helm_errors(monkeypatch) -> None:
+    chart = _build_chart()
+    monkeypatch.setattr(chart_renderer, "_resolve_helm_binary", lambda: "/usr/bin/helm")
+    monkeypatch.setattr(
+        chart_renderer.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout="", stderr="Error: release: not found"),
+    )
+
+    result = release_history_chart(chart, namespace="demo", release_name="demo-release")
+
+    assert result.success is False
+    assert any("not found" in item for item in result.errors)
 
 
 def test_rollback_returns_output(monkeypatch) -> None:

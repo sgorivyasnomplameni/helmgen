@@ -103,6 +103,27 @@ export interface ChartMonitoringResult {
   summary: string
 }
 
+export interface ChartReleaseHistoryEntry {
+  revision: number
+  updated: string | null
+  status: string | null
+  chart: string | null
+  app_version: string | null
+  description: string | null
+}
+
+export interface ChartReleaseHistoryResult {
+  success: boolean
+  release_name: string
+  namespace: string
+  entries: ChartReleaseHistoryEntry[]
+  output: string
+  errors: string[]
+  warnings: string[]
+  engine: string
+  summary: string
+}
+
 export interface ChartRollbackRequest {
   namespace: string
   release_name?: string
@@ -217,6 +238,12 @@ export const chartsApi = {
     api.get<ChartMonitoringResult>(`/charts/${id}/deploy/monitoring`, {
       params: data,
       timeout: 70000,
+    }).then(r => r.data),
+
+  releaseHistory: (id: number, data: ChartDeployRequest) =>
+    api.get<ChartReleaseHistoryResult>(`/charts/${id}/deploy/history`, {
+      params: data,
+      timeout: 50000,
     }).then(r => r.data),
 
   rollback: (id: number, data: ChartRollbackRequest) =>

@@ -122,6 +122,27 @@ class ChartMonitoringResponse(BaseModel):
     summary: str = ""
 
 
+class ChartReleaseHistoryEntry(BaseModel):
+    revision: int
+    updated: str | None = None
+    status: str | None = None
+    chart: str | None = None
+    app_version: str | None = None
+    description: str | None = None
+
+
+class ChartReleaseHistoryResponse(BaseModel):
+    success: bool
+    release_name: str
+    namespace: str
+    entries: list[ChartReleaseHistoryEntry]
+    output: str
+    errors: list[str]
+    warnings: list[str]
+    engine: str = "helm_history"
+    summary: str = ""
+
+
 class ChartRollbackRequest(BaseModel):
     namespace: str = "helmgen-demo"
     release_name: str | None = None

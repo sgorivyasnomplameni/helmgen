@@ -5,6 +5,7 @@ import tarfile
 import tempfile
 
 from jinja2 import Environment, BaseLoader
+import yaml
 
 CHART_YAML_TEMPLATE = """\
 apiVersion: v2
@@ -35,6 +36,22 @@ ingress:
   enabled: false
 
 resources: {}
+
+hostNetwork: false
+
+podSecurityContext:
+  runAsNonRoot: true
+
+containerSecurityContext:
+  privileged: false
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+extraVolumes: []
+extraVolumeMounts: []
 """
 
 _env = Environment(loader=BaseLoader())
@@ -62,16 +79,33 @@ spec:
       labels:
         {{{{- include "{name}.selectorLabels" . | nindent 8 }}}}
     spec:
+      hostNetwork: {{{{ .Values.hostNetwork | default false }}}}
+      {{{{- with .Values.podSecurityContext }}}}
+      securityContext:
+        {{{{- toYaml . | nindent 8 }}}}
+      {{{{- end }}}}
       containers:
         - name: {{{{ .Chart.Name }}}}
           image: "{{{{ .Values.image.repository }}}}:{{{{ .Values.image.tag | default .Chart.AppVersion }}}}"
           imagePullPolicy: {{{{ .Values.image.pullPolicy }}}}
+          {{{{- with .Values.containerSecurityContext }}}}
+          securityContext:
+            {{{{- toYaml . | nindent 12 }}}}
+          {{{{- end }}}}
           ports:
             - name: http
               containerPort: {{{{ .Values.containerPort }}}}
               protocol: TCP
+          {{{{- with .Values.extraVolumeMounts }}}}
+          volumeMounts:
+            {{{{- toYaml . | nindent 12 }}}}
+          {{{{- end }}}}
           resources:
             {{{{- toYaml .Values.resources | nindent 12 }}}}
+      {{{{- with .Values.extraVolumes }}}}
+      volumes:
+        {{{{- toYaml . | nindent 8 }}}}
+      {{{{- end }}}}
 """
 
 
@@ -192,45 +226,8 @@ def _parse_generated_yaml(generated_yaml: str) -> dict[str, str]:
 def _parse_values_yaml(values_yaml: str | None) -> dict:
     if not values_yaml:
         return {}
-    root: dict = {}
-    stack: list[tuple[int, dict]] = [(-1, root)]
-
-    for raw_line in values_yaml.splitlines():
-        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
-            continue
-
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        stripped = raw_line.strip()
-        if ":" not in stripped:
-            continue
-
-        key, _, raw_value = stripped.partition(":")
-        value = raw_value.strip()
-
-        while stack and indent <= stack[-1][0]:
-            stack.pop()
-
-        parent = stack[-1][1]
-        if value == "":
-            child: dict = {}
-            parent[key] = child
-            stack.append((indent, child))
-            continue
-
-        if value == "{}":
-            parsed_value = {}
-        elif value.startswith('"') and value.endswith('"'):
-            parsed_value = value[1:-1]
-        elif value == "true":
-            parsed_value = True
-        elif value == "false":
-            parsed_value = False
-        else:
-            parsed_value = value
-
-        parent[key] = parsed_value
-
-    return root
+    parsed = yaml.safe_load(values_yaml)
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _is_feature_enabled(values_data: dict, section_name: str, default: bool) -> bool:

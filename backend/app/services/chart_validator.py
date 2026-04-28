@@ -21,6 +21,90 @@ class ValidationResult(BaseModel):
     summary: str = ""
 
 
+def _is_truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "on"}
+    return False
+
+
+def _is_falsy(value: object) -> bool:
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, str):
+        return value.strip().lower() in {"false", "0", "no", "off"}
+    return False
+
+
+def _as_dict(value: object) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: object) -> list:
+    return value if isinstance(value, list) else []
+
+
+def _append_security_policy_findings(values_data: dict, errors: list[str], warnings: list[str], checks: list[str]) -> None:
+    host_network = values_data.get("hostNetwork", False)
+    if _is_truthy(host_network):
+        errors.append("hostNetwork должен быть отключён, чтобы Pod не использовал сетевой namespace узла")
+    else:
+        checks.append("hostNetwork отключён")
+
+    pod_security_context = _as_dict(values_data.get("podSecurityContext"))
+    run_as_non_root = pod_security_context.get("runAsNonRoot")
+    if run_as_non_root is True:
+        checks.append("Pod securityContext включает runAsNonRoot")
+    else:
+        warnings.append("Рекомендуется включить podSecurityContext.runAsNonRoot=true")
+
+    container_security_context = _as_dict(values_data.get("containerSecurityContext"))
+
+    if _is_truthy(container_security_context.get("privileged")):
+        errors.append("Контейнер не должен запускаться с privileged=true")
+    else:
+        checks.append("privileged mode отключён")
+
+    allow_privilege_escalation = container_security_context.get("allowPrivilegeEscalation")
+    if allow_privilege_escalation is False:
+        checks.append("allowPrivilegeEscalation отключён")
+    elif _is_truthy(allow_privilege_escalation):
+        errors.append("allowPrivilegeEscalation должен быть отключён")
+    else:
+        warnings.append("Рекомендуется явно указать containerSecurityContext.allowPrivilegeEscalation=false")
+
+    read_only_root_filesystem = container_security_context.get("readOnlyRootFilesystem")
+    if read_only_root_filesystem is True:
+        checks.append("readOnlyRootFilesystem включён")
+    elif _is_falsy(read_only_root_filesystem):
+        warnings.append("Рекомендуется включить containerSecurityContext.readOnlyRootFilesystem=true")
+
+    capabilities = _as_dict(container_security_context.get("capabilities"))
+    dropped_capabilities = [str(item) for item in _as_list(capabilities.get("drop"))]
+    if "ALL" in dropped_capabilities:
+        checks.append("Capabilities обнуляются через drop: [ALL]")
+    else:
+        warnings.append("Рекомендуется добавить containerSecurityContext.capabilities.drop: [ALL]")
+
+    added_capabilities = [str(item) for item in _as_list(capabilities.get("add"))]
+    if added_capabilities:
+        warnings.append(
+            "Добавлены Linux capabilities: "
+            + ", ".join(added_capabilities)
+            + ". Проверьте необходимость расширенных привилегий."
+        )
+
+    for volume in _as_list(values_data.get("extraVolumes")):
+        if not isinstance(volume, dict):
+            continue
+        volume_name = str(volume.get("name", "unnamed"))
+        if "hostPath" in volume:
+            errors.append(f"Том {volume_name} использует hostPath, что считается небезопасной практикой")
+        else:
+            checks.append(f"Том {volume_name} не использует hostPath")
+
+
 def _builtin_validate(chart) -> ValidationResult:
     if not chart.generated_yaml:
         return ValidationResult(
@@ -99,6 +183,8 @@ def _builtin_validate(chart) -> ValidationResult:
         warnings.append("Resource limits не заданы")
     else:
         checks.append("Resource limits заданы")
+
+    _append_security_policy_findings(values_data, errors, warnings, checks)
 
     return ValidationResult(
         valid=not errors,

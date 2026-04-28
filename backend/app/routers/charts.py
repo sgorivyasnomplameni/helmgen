@@ -19,6 +19,7 @@ from app.schemas.chart import (
     ChartDryRunResponse,
     ChartGenerateRequest,
     ChartMonitoringResponse,
+    ChartReleaseHistoryResponse,
     ChartReleaseStatusResponse,
     ChartResponse,
     ChartRollbackRequest,
@@ -35,6 +36,7 @@ from app.services.chart_renderer import (
     dry_run_deploy_chart,
     get_cluster_status,
     monitor_release_chart,
+    release_history_chart,
     release_status_chart,
     render_chart_template,
     rollback_chart,
@@ -357,6 +359,33 @@ async def monitoring(
     log_audit_event(
         db,
         action="chart.monitoring",
+        status="success" if result.success else "error",
+        summary=result.summary,
+        user=current_user,
+        chart=chart,
+        details=result.output[:4000] if result.output else ("\n".join(result.errors) or None),
+    )
+    await db.flush()
+    return result
+
+
+@router.get("/{chart_id}/deploy/history", response_model=ChartReleaseHistoryResponse)
+async def release_history(
+    chart_id: int,
+    namespace: str | None = Query(default=None),
+    release_name: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    chart = await _get_owned_chart(db, chart_id, current_user)
+    result = release_history_chart(
+        chart,
+        namespace=namespace or chart.deployed_namespace or "helmgen-demo",
+        release_name=release_name or chart.deployed_release_name or chart.name,
+    )
+    log_audit_event(
+        db,
+        action="chart.release_history",
         status="success" if result.success else "error",
         summary=result.summary,
         user=current_user,

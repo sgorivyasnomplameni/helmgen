@@ -218,6 +218,68 @@ resources:
     assert any("service" in item.lower() for item in result.errors)
 
 
+def test_validate_rejects_insecure_security_settings() -> None:
+    chart = _Chart()
+    chart.values_yaml = """\
+workload:
+  type: Deployment
+
+replicaCount: 1
+
+image:
+  repository: demo/app
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+containerPort: 8080
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+hostNetwork: true
+
+podSecurityContext: {}
+
+containerSecurityContext:
+  privileged: true
+  allowPrivilegeEscalation: true
+  readOnlyRootFilesystem: false
+  capabilities:
+    add:
+      - SYS_ADMIN
+
+extraVolumes:
+  - name: host-data
+    hostPath:
+      path: /var/run/docker.sock
+      type: Socket
+"""
+    chart.generated_yaml = generate_chart(chart)
+
+    result = validate_chart(chart)
+
+    assert result.valid is False
+    assert any("hostNetwork" in item for item in result.errors)
+    assert any("privileged" in item for item in result.errors)
+    assert any("allowPrivilegeEscalation" in item for item in result.errors)
+    assert any("hostPath" in item for item in result.errors)
+    assert any("runAsNonRoot" in item for item in result.warnings)
+    assert any("capabilities" in item.lower() for item in result.warnings)
+
+
 def test_validate_uses_helm_lint_when_available(monkeypatch) -> None:
     chart = _Chart()
     chart.values_yaml = """\
