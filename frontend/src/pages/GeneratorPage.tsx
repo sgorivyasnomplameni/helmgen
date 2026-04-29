@@ -31,6 +31,18 @@ const DEFAULT_CONFIG: ChartConfig = {
     requests: { cpu: '100m', memory: '128Mi' },
     limits: { cpu: '500m', memory: '512Mi' },
   },
+  security: {
+    hostNetwork: false,
+    podSecurityContext: {
+      runAsNonRoot: true,
+    },
+    containerSecurityContext: {
+      privileged: false,
+      allowPrivilegeEscalation: false,
+      readOnlyRootFilesystem: true,
+      capabilitiesDropAll: true,
+    },
+  },
 }
 
 const WORKLOAD_TYPES: WorkloadType[] = ['Deployment', 'StatefulSet', 'DaemonSet']
@@ -55,8 +67,8 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     title: 'Публичный веб-сервис',
     summary: 'Deployable-сценарий внешнего HTTP-сервиса с Ingress и двумя репликами.',
     goal: 'Показывает базовый production-подобный веб-сервис с реальным публичным образом.',
-    expected: 'После генерации проверьте, что chart проходит lint, создаёт Service + Ingress и может быть развёрнут в minikube.',
-    highlights: ['Deployment', '2 реплики', 'Ingress', 'Deployable'],
+    expected: 'После генерации проверьте, что chart проходит lint почти без предупреждений, создаёт Service + Ingress и может быть развёрнут в minikube.',
+    highlights: ['Deployment', '2 реплики', 'Ingress', 'Secure'],
     config: {
       appName: 'landing-page',
       version: '0.3.0',
@@ -72,6 +84,16 @@ const DEMO_SCENARIOS: DemoScenario[] = [
         requests: { cpu: '100m', memory: '128Mi' },
         limits: { cpu: '300m', memory: '256Mi' },
       },
+      security: {
+        hostNetwork: false,
+        podSecurityContext: { runAsNonRoot: true },
+        containerSecurityContext: {
+          privileged: false,
+          allowPrivilegeEscalation: false,
+          readOnlyRootFilesystem: true,
+          capabilitiesDropAll: true,
+        },
+      },
     },
   },
   {
@@ -79,8 +101,8 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     title: 'Масштабируемый API',
     summary: 'Deployable-сервис с несколькими репликами, NodePort и зафиксированными ресурсами.',
     goal: 'Показывает API-подобный сценарий на публичном образе, который реально можно развернуть.',
-    expected: 'После проверки рекомендации должны быть минимальными, а deploy не должен упираться в недоступный image.',
-    highlights: ['Deployment', '4 реплики', 'NodePort', 'Deployable'],
+    expected: 'После проверки рекомендации должны быть минимальными, а deploy не должен упираться ни в безопасность, ни в недоступный image.',
+    highlights: ['Deployment', '4 реплики', 'NodePort', 'Secure'],
     config: {
       appName: 'orders-api',
       version: '1.4.2',
@@ -96,6 +118,16 @@ const DEMO_SCENARIOS: DemoScenario[] = [
         requests: { cpu: '250m', memory: '256Mi' },
         limits: { cpu: '1000m', memory: '768Mi' },
       },
+      security: {
+        hostNetwork: false,
+        podSecurityContext: { runAsNonRoot: true },
+        containerSecurityContext: {
+          privileged: false,
+          allowPrivilegeEscalation: false,
+          readOnlyRootFilesystem: true,
+          capabilitiesDropAll: true,
+        },
+      },
     },
   },
   {
@@ -103,13 +135,13 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     title: 'Stateful БД для dev/test',
     summary: 'Deployable StatefulSet с Redis и внутренним ClusterIP-сервисом.',
     goal: 'Показывает, чем stateful-нагрузка отличается от обычного Deployment, не упираясь в обязательные env для БД.',
-    expected: 'Рекомендации должны объяснить, что один экземпляр допустим для dev/test, а deploy должен проходить на публичном образе.',
-    highlights: ['StatefulSet', '1 реплика', 'ClusterIP', 'Deployable'],
+    expected: 'Chart должен проходить базовые security-проверки, а deploy должен проходить на публичном образе.',
+    highlights: ['StatefulSet', '1 реплика', 'ClusterIP', 'Secure'],
     config: {
       appName: 'redis-cache',
       version: '7.4.0',
       image: 'redis',
-      imageTag: '7.4.2',
+      imageTag: '7.4.8',
       replicas: 1,
       containerPort: 6379,
       workloadType: 'StatefulSet',
@@ -120,6 +152,16 @@ const DEMO_SCENARIOS: DemoScenario[] = [
         requests: { cpu: '300m', memory: '512Mi' },
         limits: { cpu: '1200m', memory: '1Gi' },
       },
+      security: {
+        hostNetwork: false,
+        podSecurityContext: { runAsNonRoot: true },
+        containerSecurityContext: {
+          privileged: false,
+          allowPrivilegeEscalation: false,
+          readOnlyRootFilesystem: true,
+          capabilitiesDropAll: true,
+        },
+      },
     },
   },
   {
@@ -127,13 +169,13 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     title: 'Node-агент мониторинга',
     summary: 'Deployable DaemonSet для exporter, который запускается на каждой ноде.',
     goal: 'Показывает сценарий, где replicas не управляют числом pod, а Service часто не нужен.',
-    expected: 'После генерации проверьте, что chart не зависит от replicas, не создаёт лишний Service и разворачивается без проблем с образом.',
-    highlights: ['DaemonSet', 'Без Service', 'На каждой ноде', 'Deployable'],
+    expected: 'После генерации проверьте, что chart не зависит от replicas, не создаёт лишний Service и проходит security-проверки без замечаний.',
+    highlights: ['DaemonSet', 'Без Service', 'На каждой ноде', 'Secure'],
     config: {
       appName: 'node-exporter',
       version: '0.8.0',
       image: 'prom/node-exporter',
-      imageTag: '1.8.1',
+      imageTag: 'v1.8.1',
       replicas: 1,
       containerPort: 9100,
       workloadType: 'DaemonSet',
@@ -144,6 +186,16 @@ const DEMO_SCENARIOS: DemoScenario[] = [
         requests: { cpu: '80m', memory: '64Mi' },
         limits: { cpu: '200m', memory: '128Mi' },
       },
+      security: {
+        hostNetwork: false,
+        podSecurityContext: { runAsNonRoot: true },
+        containerSecurityContext: {
+          privileged: false,
+          allowPrivilegeEscalation: false,
+          readOnlyRootFilesystem: true,
+          capabilitiesDropAll: true,
+        },
+      },
     },
   },
   {
@@ -151,8 +203,8 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     title: 'Рискованная конфигурация',
     summary: 'Антипример на реальном образе: deployable, но с плохими архитектурными решениями.',
     goal: 'Показывает, как система реагирует на слабые решения, не упираясь в несуществующий image.',
-    expected: 'Ожидайте несколько замечаний: latest, одна реплика, Ingress без Service и отсутствие limits. Сам pod при этом должен стартовать.',
-    highlights: ['latest', '1 реплика', 'Без limits', 'Deployable'],
+    expected: 'Ожидайте несколько замечаний: latest, одна реплика, Ingress без Service, отсутствие limits и небезопасные security-параметры.',
+    highlights: ['latest', '1 реплика', 'Insecure', 'Warnings'],
     config: {
       appName: 'legacy-admin',
       version: '0.1.0',
@@ -167,6 +219,16 @@ const DEMO_SCENARIOS: DemoScenario[] = [
         enabled: false,
         requests: { cpu: '100m', memory: '128Mi' },
         limits: { cpu: '500m', memory: '512Mi' },
+      },
+      security: {
+        hostNetwork: true,
+        podSecurityContext: { runAsNonRoot: false },
+        containerSecurityContext: {
+          privileged: true,
+          allowPrivilegeEscalation: true,
+          readOnlyRootFilesystem: false,
+          capabilitiesDropAll: false,
+        },
       },
     },
   },

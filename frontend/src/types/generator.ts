@@ -25,4 +25,16 @@ export interface ChartConfig {
     requests: { cpu: string; memory: string }
     limits: { cpu: string; memory: string }
   }
+  security: {
+    hostNetwork: boolean
+    podSecurityContext: {
+      runAsNonRoot: boolean
+    }
+    containerSecurityContext: {
+      privileged: boolean
+      allowPrivilegeEscalation: boolean
+      readOnlyRootFilesystem: boolean
+      capabilitiesDropAll: boolean
+    }
+  }
 }

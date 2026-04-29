@@ -33,10 +33,19 @@ ${replicasLine}  selector:
       labels:
         {{- include "${n}.selectorLabels" . | nindent 8 }}
     spec:
+      hostNetwork: {{ .Values.hostNetwork | default false }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.containerPort }}
@@ -135,6 +144,24 @@ export function generateValuesYaml(c: ChartConfig): string {
     lines.push(`    memory: ${c.resources.limits.memory}`)
   } else {
     lines.push('resources: {}')
+  }
+
+  lines.push('')
+  lines.push(`hostNetwork: ${c.security.hostNetwork ? 'true' : 'false'}`)
+  lines.push('')
+  lines.push('podSecurityContext:')
+  lines.push(`  runAsNonRoot: ${c.security.podSecurityContext.runAsNonRoot ? 'true' : 'false'}`)
+  lines.push('')
+  lines.push('containerSecurityContext:')
+  lines.push(`  privileged: ${c.security.containerSecurityContext.privileged ? 'true' : 'false'}`)
+  lines.push(`  allowPrivilegeEscalation: ${c.security.containerSecurityContext.allowPrivilegeEscalation ? 'true' : 'false'}`)
+  lines.push(`  readOnlyRootFilesystem: ${c.security.containerSecurityContext.readOnlyRootFilesystem ? 'true' : 'false'}`)
+  lines.push('  capabilities:')
+  if (c.security.containerSecurityContext.capabilitiesDropAll) {
+    lines.push('    drop:')
+    lines.push('      - ALL')
+  } else {
+    lines.push('    drop: []')
   }
 
   return lines.join('\n')
