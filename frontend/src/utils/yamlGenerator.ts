@@ -151,6 +151,9 @@ export function generateValuesYaml(c: ChartConfig): string {
   lines.push('')
   lines.push('podSecurityContext:')
   lines.push(`  runAsNonRoot: ${c.security.podSecurityContext.runAsNonRoot ? 'true' : 'false'}`)
+  if (c.security.podSecurityContext.runAsUser !== null) {
+    lines.push(`  runAsUser: ${c.security.podSecurityContext.runAsUser}`)
+  }
   lines.push('')
   lines.push('containerSecurityContext:')
   lines.push(`  privileged: ${c.security.containerSecurityContext.privileged ? 'true' : 'false'}`)

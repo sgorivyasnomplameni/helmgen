@@ -29,6 +29,7 @@ export interface ChartConfig {
     hostNetwork: boolean
     podSecurityContext: {
       runAsNonRoot: boolean
+      runAsUser: number | null
     }
     containerSecurityContext: {
       privileged: boolean

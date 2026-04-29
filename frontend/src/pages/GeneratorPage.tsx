@@ -35,6 +35,7 @@ const DEFAULT_CONFIG: ChartConfig = {
     hostNetwork: false,
     podSecurityContext: {
       runAsNonRoot: true,
+      runAsUser: null,
     },
     containerSecurityContext: {
       privileged: false,
@@ -86,7 +87,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       },
       security: {
         hostNetwork: false,
-        podSecurityContext: { runAsNonRoot: true },
+        podSecurityContext: { runAsNonRoot: true, runAsUser: null },
         containerSecurityContext: {
           privileged: false,
           allowPrivilegeEscalation: false,
@@ -120,7 +121,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       },
       security: {
         hostNetwork: false,
-        podSecurityContext: { runAsNonRoot: true },
+        podSecurityContext: { runAsNonRoot: true, runAsUser: null },
         containerSecurityContext: {
           privileged: false,
           allowPrivilegeEscalation: false,
@@ -154,7 +155,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       },
       security: {
         hostNetwork: false,
-        podSecurityContext: { runAsNonRoot: true },
+        podSecurityContext: { runAsNonRoot: true, runAsUser: null },
         containerSecurityContext: {
           privileged: false,
           allowPrivilegeEscalation: false,
@@ -188,7 +189,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       },
       security: {
         hostNetwork: false,
-        podSecurityContext: { runAsNonRoot: true },
+        podSecurityContext: { runAsNonRoot: true, runAsUser: 65534 },
         containerSecurityContext: {
           privileged: false,
           allowPrivilegeEscalation: false,
@@ -222,7 +223,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       },
       security: {
         hostNetwork: true,
-        podSecurityContext: { runAsNonRoot: false },
+        podSecurityContext: { runAsNonRoot: false, runAsUser: null },
         containerSecurityContext: {
           privileged: true,
           allowPrivilegeEscalation: true,
