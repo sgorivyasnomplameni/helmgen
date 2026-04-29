@@ -580,12 +580,12 @@ def deploy_chart(chart, namespace: str, release_name: str | None = None) -> Depl
                     "--create-namespace",
                     "--wait",
                     "--timeout",
-                    "120s",
+                    "60s",
                 ],
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=140,
+                timeout=80,
             )
         except (OSError, subprocess.SubprocessError) as exc:
             return DeployResult(
