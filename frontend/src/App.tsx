@@ -92,7 +92,7 @@ export default function App() {
           top: 0,
           zIndex: 20,
           background: 'var(--bg-elevated)',
-          borderBottom: '1px solid var(--workspace-border)',
+          borderBottom: '1px solid var(--border-subtle)',
         }}
       >
         <div
@@ -149,8 +149,8 @@ export default function App() {
                 gap: '0.55rem',
                 padding: '0.55rem 0.85rem',
                 borderRadius: '999px',
-                border: '1px solid var(--border)',
-                background: 'var(--panel-contrast)',
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--surface-contrast)',
                 color: 'var(--text-soft)',
                 fontWeight: 700,
                 cursor: 'pointer',
@@ -166,10 +166,10 @@ export default function App() {
               style={{
                 display: 'inline-flex',
                 padding: '0.25rem',
-                background: 'var(--panel-contrast)',
+                background: 'var(--surface-contrast)',
                 borderRadius: '999px',
                 gap: '0.25rem',
-                border: '1px solid var(--border)',
+                border: '1px solid var(--border-subtle)',
               }}
             >
               <button
@@ -181,8 +181,8 @@ export default function App() {
                   padding: '0.6rem 1rem',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  background: view === 'generator' ? 'var(--workspace-bg)' : 'transparent',
-                  color: view === 'generator' ? 'var(--workspace-text)' : 'var(--text-soft)',
+                  background: view === 'generator' ? 'var(--surface-elevated)' : 'transparent',
+                  color: view === 'generator' ? 'var(--text)' : 'var(--text-soft)',
                 }}
               >
                 Генератор
@@ -196,8 +196,8 @@ export default function App() {
                   padding: '0.6rem 1rem',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  background: view === 'ops' ? 'var(--workspace-bg)' : 'transparent',
-                  color: view === 'ops' ? 'var(--workspace-text)' : 'var(--text-soft)',
+                  background: view === 'ops' ? 'var(--surface-elevated)' : 'transparent',
+                  color: view === 'ops' ? 'var(--text)' : 'var(--text-soft)',
                 }}
               >
                 Проверка и deploy
@@ -208,12 +208,12 @@ export default function App() {
               type="button"
               onClick={() => setView('history')}
               style={{
-                border: '1px solid var(--border)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '999px',
                 padding: '0.6rem 0.95rem',
                 fontWeight: 700,
                 cursor: 'pointer',
-                background: view === 'history' ? 'var(--panel-strong)' : 'transparent',
+                background: view === 'history' ? 'var(--surface-elevated)' : 'transparent',
                 color: view === 'history' ? 'var(--text)' : 'var(--text-soft)',
               }}
             >

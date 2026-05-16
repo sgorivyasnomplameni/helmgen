@@ -1442,19 +1442,19 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       <div style={{ position: 'sticky', top: '5.75rem' }}>
         <div
           style={{
-            background: 'var(--workspace-bg)',
+            background: 'var(--surface-base)',
             borderRadius: '1rem',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
             minHeight: '760px',
             boxShadow: 'var(--shadow)',
-            border: '1px solid var(--workspace-border)',
+            border: '1px solid var(--border-subtle)',
           }}
         >
-          <div style={{ padding: '1rem 1.25rem 0', background: 'var(--workspace-bg)' }}>
+          <div style={{ padding: '1rem 1.25rem 0', background: 'var(--surface-base)' }}>
             <div style={{ marginBottom: '0.85rem' }}>
-              <div style={{ color: 'var(--workspace-muted)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                 Результат
               </div>
             </div>
@@ -1477,8 +1477,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       border: 'none',
                       borderRadius: '0.5rem 0.5rem 0 0',
                       cursor: 'pointer',
-                      background: active ? 'var(--workspace-surface)' : 'transparent',
-                      color: active ? 'var(--workspace-text)' : 'var(--workspace-muted)',
+                      background: active ? 'var(--surface-elevated)' : 'transparent',
+                      color: active ? 'var(--text)' : 'var(--text-muted)',
                       borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
                       whiteSpace: 'nowrap',
                     }}
@@ -1490,7 +1490,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
             </div>
           </div>
 
-          <div style={{ flex: 1, background: 'var(--workspace-surface)', padding: '1rem', overflow: 'auto' }}>
+          <div style={{ flex: 1, background: 'var(--surface-elevated)', padding: '1rem', overflow: 'auto' }}>
             {workspaceSection === 'preview' && (
               <div>
                 <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', marginBottom: '1rem' }}>
@@ -1508,10 +1508,11 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                         fontSize: '0.74rem',
                         border: 'none',
                         borderRadius: '0.45rem',
-                        background: active ? 'var(--accent)' : 'var(--workspace-surface-2)',
-                        color: disabled ? '#51627d' : 'var(--workspace-text)',
+                        background: active ? 'var(--accent-soft)' : 'var(--surface-muted)',
+                        color: disabled ? 'var(--text-muted)' : active ? 'var(--accent-contrast)' : 'var(--text-soft)',
                         cursor: disabled ? 'not-allowed' : 'pointer',
                         whiteSpace: 'nowrap',
+                        opacity: disabled ? 0.45 : 1,
                       }}
                       >
                         {tab}
@@ -1525,7 +1526,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
                     fontSize: '0.78rem',
                     lineHeight: 1.7,
-                    color: 'var(--workspace-text)',
+                    color: 'var(--text)',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                   }}
@@ -1539,25 +1540,25 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
               <div>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Результат проверки</div>
+                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Результат проверки</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <span style={{ ...stepChipBase, background: '#334155', color: '#e2e8f0' }}>{validation?.engine === 'helm_lint' ? 'helm lint' : 'builtin'}</span>
-                      <span style={{ ...stepChipBase, background: validation?.valid ? '#14532d' : validation ? '#7f1d1d' : '#334155', color: '#f8fafc' }}>{validation ? (validation.valid ? 'VALID' : 'INVALID') : 'WAITING'}</span>
+                      <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation?.engine === 'helm_lint' ? 'helm lint' : 'builtin'}</span>
+                      <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation ? (validation.valid ? 'VALID' : 'INVALID') : 'WAITING'}</span>
                     </div>
                   </div>
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
                     {validation?.summary || 'После проверки здесь появится итог helm lint и встроенной валидации.'}
                   </div>
                 </div>
 
                 {!validation ? (
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Результат проверки появится после запуска проверки.</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Результат проверки появится после запуска проверки.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {validation.errors.length > 0 && (
                       <div>
-                        <div style={{ color: '#fca5a5', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Ошибки</div>
-                        <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#fecaca' }}>
+                        <div style={{ color: 'var(--danger)', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Ошибки</div>
+                        <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
                           {validation.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                         </ul>
                       </div>
@@ -1565,16 +1566,16 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
                     {validation.warnings.length > 0 && (
                       <div>
-                        <div style={{ color: '#fcd34d', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Предупреждения</div>
-                        <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#fde68a' }}>
+                        <div style={{ color: 'var(--warning)', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Предупреждения</div>
+                        <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
                           {validation.warnings.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                         </ul>
                       </div>
                     )}
 
                     <div>
-                      <div style={{ color: '#86efac', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Успешные проверки</div>
-                      <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#bbf7d0' }}>
+                      <div style={{ color: 'var(--success)', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Успешные проверки</div>
+                      <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
                         {validation.checks.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                       </ul>
                     </div>

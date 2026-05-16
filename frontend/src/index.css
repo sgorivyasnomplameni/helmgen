@@ -6,16 +6,18 @@
   color-scheme: light;
   --bg: #eef2f6;
   --bg-elevated: rgba(255, 255, 255, 0.92);
-  --panel: #fbfdff;
-  --panel-muted: #f3f6fb;
-  --panel-strong: #ffffff;
-  --panel-contrast: #e9eef6;
-  --border: #d7dee9;
+  --surface-base: #fbfdff;
+  --surface-muted: #f3f6fb;
+  --surface-elevated: #ffffff;
+  --surface-contrast: #e9eef6;
+  --surface-inset: #dde6f2;
+  --border-subtle: #d7dee9;
   --border-strong: #c1cad8;
   --text: #162033;
   --text-soft: #314156;
   --text-muted: #66768c;
   --accent: #3b82f6;
+  --accent-strong: #2563eb;
   --accent-soft: #dbeafe;
   --accent-contrast: #1d4ed8;
   --success: #15803d;
@@ -25,28 +27,44 @@
   --danger: #b91c1c;
   --danger-soft: #fee2e2;
   --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-  --workspace-bg: #121a2b;
-  --workspace-surface: #202b3f;
-  --workspace-surface-2: #11192b;
-  --workspace-border: rgba(148, 163, 184, 0.12);
-  --workspace-text: #e5edf8;
-  --workspace-muted: #8ea0b9;
+  --shadow-soft: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --input-bg: var(--surface-elevated);
+  --code-bg: #162033;
+  --code-surface: #1d2940;
+  --code-border: rgba(21, 32, 51, 0.12);
+  --code-text: #edf4ff;
+  --code-muted: #9fb0c7;
+
+  /* Compatibility aliases while components migrate to the normalized scale. */
+  --panel: var(--surface-base);
+  --panel-muted: var(--surface-muted);
+  --panel-strong: var(--surface-elevated);
+  --panel-contrast: var(--surface-contrast);
+  --border: var(--border-subtle);
+  --workspace-bg: var(--surface-base);
+  --workspace-surface: var(--surface-elevated);
+  --workspace-surface-2: var(--surface-muted);
+  --workspace-border: var(--border-subtle);
+  --workspace-text: var(--text);
+  --workspace-muted: var(--text-muted);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
   --bg: #0b1220;
   --bg-elevated: rgba(15, 23, 42, 0.94);
-  --panel: #111827;
-  --panel-muted: #172133;
-  --panel-strong: #0f172a;
-  --panel-contrast: #1c2840;
-  --border: #22314a;
+  --surface-base: #111827;
+  --surface-muted: #172133;
+  --surface-elevated: #0f172a;
+  --surface-contrast: #1c2840;
+  --surface-inset: #22314a;
+  --border-subtle: #22314a;
   --border-strong: #31415f;
   --text: #e6edf7;
   --text-soft: #cad6e8;
   --text-muted: #8ea0b9;
   --accent: #60a5fa;
+  --accent-strong: #3b82f6;
   --accent-soft: rgba(59, 130, 246, 0.18);
   --accent-contrast: #93c5fd;
   --success: #4ade80;
@@ -56,12 +74,26 @@
   --danger: #f87171;
   --danger-soft: rgba(248, 113, 113, 0.16);
   --shadow: 0 8px 24px rgba(2, 6, 23, 0.32);
-  --workspace-bg: #0a1120;
-  --workspace-surface: #111b2d;
-  --workspace-surface-2: #09101d;
-  --workspace-border: rgba(96, 165, 250, 0.12);
-  --workspace-text: #edf4ff;
-  --workspace-muted: #8ea0b9;
+  --shadow-soft: 0 20px 52px rgba(2, 6, 23, 0.42);
+  --input-bg: var(--surface-muted);
+  --code-bg: #0a1120;
+  --code-surface: #111b2d;
+  --code-border: rgba(96, 165, 250, 0.12);
+  --code-text: #edf4ff;
+  --code-muted: #8ea0b9;
+
+  /* Compatibility aliases while components migrate to the normalized scale. */
+  --panel: var(--surface-base);
+  --panel-muted: var(--surface-muted);
+  --panel-strong: var(--surface-elevated);
+  --panel-contrast: var(--surface-contrast);
+  --border: var(--border-subtle);
+  --workspace-bg: var(--surface-base);
+  --workspace-surface: var(--surface-elevated);
+  --workspace-surface-2: var(--surface-muted);
+  --workspace-border: var(--border-subtle);
+  --workspace-text: var(--text);
+  --workspace-muted: var(--text-muted);
 }
 
 html, body, #root {

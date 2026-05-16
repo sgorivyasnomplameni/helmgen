@@ -355,6 +355,21 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
   const deploySucceeded = Boolean(deployResult?.success)
   const showDeployConfirmation = !deploySucceeded && (dryRunReady || tab === 'deploy')
   const showRollbackControls = tab === 'rollback'
+  const showAdvancedOperations = deploySucceeded || Boolean(releaseStatusResult || monitoringResult || releaseHistoryResult || rollbackResult || uninstallResult)
+  const visibleTabs: Array<[OpsTab, string]> = deploySucceeded
+    ? [
+        ['template', 'Рендер'],
+        ['dry-run', 'Dry-run'],
+        ['deploy', 'Deploy'],
+        ['monitoring', 'Мониторинг'],
+        ['rollback', 'Rollback'],
+        ['uninstall', 'Удаление'],
+      ]
+    : [
+        ['template', 'Рендер'],
+        ['dry-run', 'Dry-run'],
+        ['deploy', 'Deploy'],
+      ]
 
   const primaryFlowAction =
     !templateReady
@@ -929,22 +944,16 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               </button>
             </div>
 
-            <div style={{ marginTop: '0.85rem', display: 'grid', gap: '0.55rem' }}>
-              <div style={{ color: clusterStatus?.helm_available ? 'var(--success)' : 'var(--warning)', fontWeight: 700 }}>
-                Helm: {clusterStatus?.helm_available ? 'найден' : 'не найден'}
-              </div>
-              <div style={{ color: clusterStatus?.kubeconfig_present ? 'var(--success)' : 'var(--warning)', fontWeight: 700 }}>
-                Kubeconfig: {clusterStatus?.kubeconfig_present ? 'найден' : 'не найден'}
-              </div>
-              <div style={{ color: clusterStatus?.current_context ? 'var(--text)' : 'var(--text-muted)', fontWeight: 700 }}>
-                Context: {clusterStatus?.current_context || 'не определён'}
-              </div>
-              <div style={{ color: clusterStatus?.cluster_server ? 'var(--text)' : 'var(--text-muted)', fontWeight: 700, wordBreak: 'break-word' }}>
-                API server: {clusterStatus?.cluster_server || 'не определён'}
-              </div>
-              <div style={{ color: clusterReady ? 'var(--success)' : 'var(--warning)', fontWeight: 800 }}>
-                Кластер: {clusterReady ? 'доступен' : 'недоступен'}
-              </div>
+            <div style={{ marginTop: '0.85rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <span style={{ padding: '0.38rem 0.65rem', borderRadius: '999px', background: clusterReady ? 'var(--success-soft)' : 'var(--warning-soft)', color: clusterReady ? 'var(--success)' : 'var(--warning)', fontSize: '0.78rem', fontWeight: 800 }}>
+                {clusterReady ? 'Кластер доступен' : 'Кластер недоступен'}
+              </span>
+              <span style={{ padding: '0.38rem 0.65rem', borderRadius: '999px', background: clusterStatus?.helm_available ? 'var(--success-soft)' : 'var(--panel-strong)', color: clusterStatus?.helm_available ? 'var(--success)' : 'var(--text-soft)', fontSize: '0.78rem', fontWeight: 800 }}>
+                Helm {clusterStatus?.helm_available ? 'готов' : 'не найден'}
+              </span>
+              <span style={{ padding: '0.38rem 0.65rem', borderRadius: '999px', background: clusterStatus?.current_context ? 'var(--panel-strong)' : 'var(--warning-soft)', color: clusterStatus?.current_context ? 'var(--text-soft)' : 'var(--warning)', fontSize: '0.78rem', fontWeight: 800 }}>
+                {clusterStatus?.current_context || 'Нет context'}
+              </span>
             </div>
 
             {clusterStatus?.summary && (
@@ -964,6 +973,17 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                 {clusterStatus.summary}
               </div>
             )}
+
+            <details style={{ marginTop: '0.8rem' }}>
+              <summary style={{ cursor: 'pointer', color: 'var(--text-soft)', fontSize: '0.8rem', fontWeight: 700 }}>
+                Технические детали подключения
+              </summary>
+              <div style={{ marginTop: '0.65rem', display: 'grid', gap: '0.45rem', color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                <div>Kubeconfig: {clusterStatus?.kubeconfig_present ? 'найден' : 'не найден'}</div>
+                <div>Context: {clusterStatus?.current_context || 'не определён'}</div>
+                <div style={{ wordBreak: 'break-word' }}>API server: {clusterStatus?.cluster_server || 'не определён'}</div>
+              </div>
+            </details>
 
             {!clusterReady && clusterBlockingReason && (
               <details style={{ marginTop: '0.8rem' }}>
@@ -987,9 +1007,6 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
           <div style={{ ...card, padding: '1.15rem' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: '0.35rem' }}>
               Параметры текущего шага
-            </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.83rem', lineHeight: 1.55, marginBottom: '0.8rem' }}>
-              Эти параметры используются для dry-run, deploy и release-операций. Меняй их только перед следующим шагом, а не на каждом действии подряд.
             </div>
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               <label style={{ display: 'grid', gap: '0.35rem' }}>
@@ -1037,13 +1054,13 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: '0.65rem',
-                    padding: '0.8rem',
+                    padding: '0.75rem 0.8rem',
                     borderRadius: '0.75rem',
-                    border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)',
-                    background: 'var(--warning-soft)',
-                    color: 'var(--warning)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--panel-strong)',
+                    color: 'var(--text-soft)',
                     fontSize: '0.82rem',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     lineHeight: 1.45,
                     cursor: 'pointer',
                   }}
@@ -1131,7 +1148,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
 
           <div style={{ ...card, padding: '1.15rem' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: '0.8rem' }}>
-              Прогресс сценария
+              Краткий прогресс
             </div>
             <div style={{ display: 'grid', gap: '0.65rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
@@ -1204,12 +1221,13 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             </div>
           </div>
 
-          <div style={{ ...card, padding: '1.15rem' }}>
+          {showAdvancedOperations && (
+            <div style={{ ...card, padding: '1.15rem' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: '0.35rem' }}>
               Дополнительные действия
             </div>
             <div style={{ color: 'var(--text-muted)', fontSize: '0.83rem', lineHeight: 1.55, marginBottom: '0.8rem' }}>
-              Здесь только post-deploy и опасные операции. Для обычного сценария сверху достаточно render → dry-run → deploy.
+              Эти действия нужны уже после основного deploy или для восстановления release.
             </div>
             <div style={{ display: 'grid', gap: '0.55rem' }}>
               <button
@@ -1260,35 +1278,23 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                 {isUninstalling ? 'Удаляем release...' : 'Удалить release'}
               </button>
             </div>
-          </div>
-
-          <AuditList
-            title="Журнал по chart"
-            events={auditEvents}
-            emptyText="После генерации, проверки и deploy здесь появится история действий по текущему chart."
-          />
+            </div>
+          )}
         </div>
 
         <div
           style={{
-            background: 'var(--workspace-bg)',
+            background: 'var(--surface-base)',
             borderRadius: '1rem',
-            border: '1px solid var(--workspace-border)',
+            border: '1px solid var(--border-subtle)',
             minHeight: '720px',
             overflow: 'hidden',
             boxShadow: 'var(--shadow)',
           }}
         >
-          <div style={{ padding: '1rem 1.25rem 0', background: 'var(--workspace-bg)' }}>
+          <div style={{ padding: '1rem 1.25rem 0', background: 'var(--surface-base)' }}>
             <div style={{ display: 'flex', gap: '0.25rem', overflowX: 'auto', marginBottom: '0.5rem' }}>
-              {([
-                ['template', 'Рендер'],
-                ['dry-run', 'Dry-run'],
-                ['deploy', 'Развёртывание'],
-                ['monitoring', 'Мониторинг'],
-                ['rollback', 'Rollback'],
-                ['uninstall', 'Удаление'],
-              ] as Array<[OpsTab, string]>).map(([nextTab, label]) => {
+              {visibleTabs.map(([nextTab, label]) => {
                 const activeTab = tab === nextTab
                 return (
                   <button
@@ -1302,8 +1308,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                       border: 'none',
                       borderRadius: '0.5rem 0.5rem 0 0',
                       cursor: 'pointer',
-                      background: activeTab ? 'var(--workspace-surface)' : 'transparent',
-                      color: activeTab ? 'var(--workspace-text)' : 'var(--workspace-muted)',
+                      background: activeTab ? 'var(--surface-elevated)' : 'transparent',
+                      color: activeTab ? 'var(--text)' : 'var(--text-muted)',
                       borderBottom: activeTab ? '2px solid var(--accent)' : '2px solid transparent',
                       whiteSpace: 'nowrap',
                     }}
@@ -1315,7 +1321,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             </div>
           </div>
 
-          <div style={{ background: 'var(--workspace-surface)', padding: '1rem', minHeight: '640px' }}>
+          <div style={{ background: 'var(--surface-elevated)', padding: '1rem', minHeight: '640px' }}>
             {tab === 'template' && (
               <div>
                 <div style={{ marginBottom: '1rem' }}>
@@ -1883,6 +1889,19 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
           </div>
         </div>
       </div>
+
+      <details style={{ marginTop: '1rem' }}>
+        <summary style={{ cursor: 'pointer', color: 'var(--text-soft)', fontSize: '0.85rem', fontWeight: 700 }}>
+          Журнал и аудит по chart
+        </summary>
+        <div style={{ marginTop: '0.85rem' }}>
+          <AuditList
+            title="Журнал по chart"
+            events={auditEvents}
+            emptyText="После генерации, проверки и deploy здесь появится история действий по текущему chart."
+          />
+        </div>
+      </details>
     </div>
   )
 }

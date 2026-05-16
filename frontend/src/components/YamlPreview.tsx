@@ -59,25 +59,26 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
   return (
     <div
       style={{
-        background: '#0f172a',
+        background: 'var(--surface-elevated)',
+        border: '1px solid var(--border-subtle)',
         borderRadius: '1rem',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
         minHeight: '600px',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+        boxShadow: 'var(--shadow)',
       }}
     >
       {/* Header */}
       <div
         style={{
           padding: '1rem 1.25rem 0',
-          background: '#0f172a',
+          background: 'var(--surface-elevated)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-          <span style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
             Предпросмотр YAML
           </span>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -89,9 +90,9 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.35rem',
-                background: '#1e3a5f',
-                color: '#93c5fd',
-                border: '1px solid #1d4ed8',
+                background: 'var(--accent-soft)',
+                color: 'var(--accent-contrast)',
+                border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
                 borderRadius: '0.375rem',
                 padding: '0.3rem 0.7rem',
                 fontSize: '0.75rem',
@@ -107,16 +108,18 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
           )}
           <button
             onClick={handleCopy}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              background: copied ? '#166534' : '#1e293b',
-              color: copied ? '#86efac' : '#94a3b8',
-              border: 'none',
-              borderRadius: '0.375rem',
-              padding: '0.3rem 0.7rem',
-              fontSize: '0.75rem',
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                background: copied ? 'var(--success-soft)' : 'var(--surface-muted)',
+                color: copied ? 'var(--success)' : 'var(--text-muted)',
+                border: copied
+                  ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
+                  : '1px solid var(--border-subtle)',
+                borderRadius: '0.375rem',
+                padding: '0.3rem 0.7rem',
+                fontSize: '0.75rem',
               cursor: 'pointer',
               transition: 'all 0.2s',
             }}
@@ -157,11 +160,12 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
                   border: 'none',
                   borderRadius: '0.375rem 0.375rem 0 0',
                   cursor: disabled ? 'not-allowed' : 'pointer',
-                  background: active ? '#1e293b' : 'transparent',
-                  color: disabled ? '#334155' : active ? '#e2e8f0' : '#64748b',
-                  borderBottom: active ? '2px solid #3b82f6' : '2px solid transparent',
+                  background: active ? 'var(--surface-muted)' : 'transparent',
+                  color: disabled ? 'var(--text-muted)' : active ? 'var(--text)' : 'var(--text-muted)',
+                  borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
                   transition: 'all 0.15s',
                   whiteSpace: 'nowrap',
+                  opacity: disabled ? 0.45 : 1,
                 }}
               >
                 {tab}
@@ -175,7 +179,7 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
       <div
         style={{
           flex: 1,
-          background: '#1e293b',
+          background: 'var(--code-surface)',
           padding: '1.25rem',
           overflow: 'auto',
         }}
@@ -186,7 +190,7 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
             fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
             fontSize: '0.78rem',
             lineHeight: 1.7,
-            color: '#e2e8f0',
+            color: 'var(--code-text)',
             whiteSpace: 'pre',
           }}
         >

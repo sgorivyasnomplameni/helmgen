@@ -17,8 +17,8 @@ const shellStyle: CSSProperties = {
 const cardStyle: CSSProperties = {
   maxWidth: '460px',
   margin: '3rem auto 0',
-  background: 'var(--panel)',
-  border: '1px solid var(--border)',
+  background: 'var(--surface-base)',
+  border: '1px solid var(--border-subtle)',
   borderRadius: '1.25rem',
   padding: '1.4rem',
   boxShadow: 'var(--shadow-soft)',
@@ -28,7 +28,7 @@ const inputStyle: CSSProperties = {
   width: '100%',
   background: 'var(--input-bg)',
   color: 'var(--text)',
-  border: '1px solid var(--border)',
+  border: '1px solid var(--border-subtle)',
   borderRadius: '0.8rem',
   padding: '0.85rem 0.95rem',
   fontSize: '0.98rem',
@@ -86,8 +86,8 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
             gap: '0.25rem',
             padding: '0.25rem',
             borderRadius: '999px',
-            border: '1px solid var(--border)',
-            background: 'var(--panel-contrast)',
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--surface-contrast)',
             marginBottom: '1rem',
           }}
         >
@@ -105,8 +105,8 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
                 padding: '0.55rem 0.9rem',
                 fontWeight: 700,
                 cursor: 'pointer',
-                background: mode === item ? 'var(--workspace-bg)' : 'transparent',
-                color: mode === item ? 'var(--workspace-text)' : 'var(--text-soft)',
+                background: mode === item ? 'var(--surface-elevated)' : 'transparent',
+                color: mode === item ? 'var(--text)' : 'var(--text-soft)',
               }}
             >
               {item === 'login' ? 'Вход' : 'Регистрация'}
