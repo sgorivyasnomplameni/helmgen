@@ -14,9 +14,9 @@ const pageShell: React.CSSProperties = {
 }
 
 const card: React.CSSProperties = {
-  background: 'var(--panel)',
+  background: 'var(--surface-base)',
   borderRadius: '1rem',
-  border: '1px solid var(--border)',
+  border: '1px solid var(--border-subtle)',
   boxShadow: 'var(--shadow)',
 }
 
@@ -176,7 +176,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
             disabled={loading}
             style={{
               ...actionButton,
-              background: loading ? 'var(--border-strong)' : 'var(--panel-contrast)',
+              background: loading ? 'var(--border-strong)' : 'var(--surface-contrast)',
               color: 'var(--text)',
             }}
           >
@@ -192,7 +192,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
               borderRadius: '0.8rem',
               background: 'var(--danger-soft)',
               color: 'var(--danger)',
-              border: '1px solid var(--border)',
+              border: '1px solid var(--border-subtle)',
             }}
           >
             {error}
@@ -210,14 +210,14 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                   ? 'var(--success-soft)'
                   : actionNote.tone === 'error'
                     ? 'var(--danger-soft)'
-                    : 'var(--panel-muted)',
+                    : 'var(--surface-muted)',
               color:
                 actionNote.tone === 'success'
                   ? 'var(--success)'
                   : actionNote.tone === 'error'
                     ? 'var(--danger)'
                     : 'var(--text-soft)',
-              border: '1px solid var(--border)',
+              border: '1px solid var(--border-subtle)',
               fontWeight: 600,
             }}
           >
@@ -234,7 +234,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
             style={{
               padding: '2rem',
               borderRadius: '0.9rem',
-              background: 'var(--panel-muted)',
+              background: 'var(--surface-muted)',
               border: '1px dashed var(--border-strong)',
               textAlign: 'center',
               color: 'var(--text-muted)',
@@ -252,7 +252,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                 <div
                   key={chart.id}
                   style={{
-                    border: '1px solid var(--border)',
+                    border: '1px solid var(--border-subtle)',
                     borderRadius: '0.9rem',
                     padding: '1rem',
                     display: 'grid',
@@ -315,7 +315,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                         onClick={() => onOpenOps(chart.id)}
                         style={{
                           ...actionButton,
-                          background: isGenerated ? 'var(--panel-contrast)' : 'var(--panel-contrast)',
+                          background: 'var(--surface-contrast)',
                           color: isGenerated ? 'var(--text)' : 'var(--text-muted)',
                           cursor: isGenerated ? 'pointer' : 'not-allowed',
                         }}
@@ -329,7 +329,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                       onClick={() => handleDownload(chart.id, chart.name, chart.chart_version)}
                       style={{
                         ...actionButton,
-                        background: isGenerated ? 'var(--accent-soft)' : 'var(--panel-contrast)',
+                        background: isGenerated ? 'var(--accent-soft)' : 'var(--surface-contrast)',
                         color: isGenerated ? 'var(--accent-contrast)' : 'var(--text-muted)',
                         cursor: isGenerated ? 'pointer' : 'not-allowed',
                       }}

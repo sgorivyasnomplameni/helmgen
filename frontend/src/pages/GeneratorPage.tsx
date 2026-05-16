@@ -238,11 +238,11 @@ const DEMO_SCENARIOS: DemoScenario[] = [
 ]
 
 const card: React.CSSProperties = {
-  background: 'var(--panel)',
+  background: 'var(--surface-base)',
   borderRadius: '0.875rem',
   padding: '1.5rem',
   boxShadow: 'var(--shadow)',
-  border: '1px solid var(--border)',
+  border: '1px solid var(--border-subtle)',
 }
 
 const fieldLabel: React.CSSProperties = {
@@ -262,8 +262,8 @@ const input: React.CSSProperties = {
   fontSize: '0.875rem',
   outline: 'none',
   color: 'var(--text)',
-  background: 'var(--panel-strong)',
-  border: '1px solid var(--border)',
+  background: 'var(--surface-elevated)',
+  border: '1px solid var(--border-subtle)',
   boxSizing: 'border-box',
 }
 
@@ -276,7 +276,7 @@ const sectionTitle: React.CSSProperties = {
 
 const divider: React.CSSProperties = {
   border: 'none',
-  borderTop: '1px solid var(--border)',
+  borderTop: '1px solid var(--border-subtle)',
   margin: '1.25rem 0',
 }
 
@@ -777,7 +777,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '280px minmax(0, 1fr) 460px',
+        gridTemplateColumns: '260px minmax(0, 1fr) 430px',
         gap: '1.5rem',
         alignItems: 'start',
         padding: '1.5rem',
@@ -800,7 +800,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
           style={{
             ...card,
             padding: '0.95rem 1.1rem',
-            border: '1px solid var(--border)',
+            border: '1px solid var(--border-subtle)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
@@ -817,9 +817,9 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   setConfig(DEFAULT_CONFIG)
                 }}
                 style={{
-                  border: '1px solid var(--border)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '999px',
-                  background: 'var(--panel-strong)',
+                  background: 'var(--surface-elevated)',
                   color: 'var(--text-soft)',
                   fontWeight: 700,
                   fontSize: '0.78rem',
@@ -863,8 +863,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                     onClick={() => applyScenario(scenario)}
                     style={{
                       textAlign: 'left',
-                      border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
-                      background: selected ? 'var(--accent-soft)' : 'var(--panel-strong)',
+                      border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                      background: selected ? 'var(--accent-soft)' : 'var(--surface-elevated)',
                       borderRadius: '0.8rem',
                       padding: '0.9rem',
                       cursor: 'pointer',
@@ -905,7 +905,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                           style={{
                             padding: '0.28rem 0.5rem',
                             borderRadius: '999px',
-                            background: 'var(--panel-contrast)',
+                            background: 'var(--surface-contrast)',
                             color: 'var(--text-soft)',
                             fontSize: '0.7rem',
                             fontWeight: 700,
@@ -926,12 +926,12 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
           style={{
             ...card,
             padding: '0.9rem 1rem',
-            background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
+            background: 'var(--surface-base)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '0.9rem' }}>
             <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Этапы</div>
-            <span style={{ ...stepChipBase, background: 'var(--panel-strong)', color: 'var(--text-soft)', border: '1px solid var(--border)' }}>
+            <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
               {isDraftDirty
                 ? 'Есть изменения'
                 : reviewReady
@@ -953,8 +953,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   style={{
                     padding: '0.75rem 0.85rem',
                     borderRadius: '0.85rem',
-                    border: `1px solid ${item.done ? 'var(--success)' : item.active ? 'var(--accent)' : 'var(--border)'}`,
-                    background: item.active ? 'var(--panel-strong)' : 'var(--panel)',
+                    border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 30%, var(--border-subtle) 70%)' : item.active ? 'color-mix(in srgb, var(--accent) 30%, var(--border-subtle) 70%)' : 'var(--border-subtle)'}`,
+                    background: item.active ? 'var(--surface-elevated)' : 'var(--surface-base)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.65rem',
@@ -971,9 +971,9 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      background: item.done ? 'var(--success-soft)' : item.active ? 'var(--accent-soft)' : 'var(--panel-strong)',
+                      background: item.done ? 'var(--success-soft)' : item.active ? 'var(--accent-soft)' : 'var(--surface-muted)',
                       color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                      border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 45%, transparent)' : item.active ? 'color-mix(in srgb, var(--accent) 35%, transparent)' : 'var(--border)'}`,
+                      border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 30%, transparent)' : item.active ? 'color-mix(in srgb, var(--accent) 30%, transparent)' : 'var(--border-subtle)'}`,
                       fontSize: '0.76rem',
                       fontWeight: 800,
                       flexShrink: 0,
@@ -1000,7 +1000,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
             display: 'flex',
             flexDirection: 'column',
             gap: '0.75rem',
-            background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
+            background: 'var(--surface-base)',
           }}
         >
           <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Действия</div>
@@ -1024,8 +1024,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       cursor: action.disabled ? 'not-allowed' : 'pointer',
                       opacity: action.disabled ? 0.5 : 1,
                       minWidth: '220px',
-                      background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--accent)',
-                      color: action.tone === 'success' ? 'var(--success)' : 'white',
+                      background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--accent-strong)',
+                      color: action.tone === 'success' ? 'var(--success)' : '#fff',
                       border: action.tone === 'success'
                         ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
                         : '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
@@ -1056,11 +1056,11 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                         fontWeight: 700,
                         cursor: action.disabled ? 'not-allowed' : 'pointer',
                         opacity: action.disabled ? 0.5 : 1,
-                        background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--panel-strong)',
+                        background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--surface-elevated)',
                         color: action.tone === 'success' ? 'var(--success)' : 'var(--text-soft)',
                         border: action.tone === 'success'
                           ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
-                          : '1px solid var(--border)',
+                          : '1px solid var(--border-subtle)',
                       }}
                     >
                       {action.label}
@@ -1078,9 +1078,9 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   style={{
                     ...stepChipBase,
                     padding: '0.35rem 0.6rem',
-                    background: 'var(--panel-strong)',
+                    background: 'var(--surface-muted)',
                     color: 'var(--text-soft)',
-                    border: '1px solid var(--border)',
+                    border: '1px solid var(--border-subtle)',
                   }}
                 >
                   Deploy
@@ -1119,7 +1119,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                     ? 'var(--success-soft)'
                     : actionNote.tone === 'error'
                       ? 'var(--danger-soft)'
-                      : 'var(--panel-strong)',
+                      : 'var(--surface-elevated)',
                 color:
                   actionNote.tone === 'success'
                     ? 'var(--success)'
@@ -1131,7 +1131,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                     ? '1px solid color-mix(in srgb, var(--success) 30%, transparent)'
                     : actionNote.tone === 'error'
                       ? '1px solid color-mix(in srgb, var(--danger) 30%, transparent)'
-                      : '1px solid var(--border)',
+                      : '1px solid var(--border-subtle)',
                 fontSize: '0.84rem',
                 lineHeight: 1.5,
                 fontWeight: 600,
@@ -1186,10 +1186,10 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       onClick={() => void handleCreateProject()}
                       disabled={isCreatingProject}
                       style={{
-                        border: '1px solid var(--border)',
+                        border: '1px solid var(--border-subtle)',
                         borderRadius: '0.65rem',
                         padding: '0.7rem 0.9rem',
-                        background: 'var(--panel-contrast)',
+                        background: 'var(--surface-contrast)',
                         color: 'var(--text)',
                         fontWeight: 700,
                         cursor: isCreatingProject ? 'progress' : 'pointer',
@@ -1346,9 +1346,9 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                         style={{
                           flex: 1,
                           padding: '0.5rem',
-                          border: `2px solid ${config.service.type === t ? 'var(--accent)' : 'var(--border)'}`,
+                          border: `2px solid ${config.service.type === t ? 'var(--accent)' : 'var(--border-subtle)'}`,
                           borderRadius: '0.5rem',
-                          background: config.service.type === t ? 'var(--accent-soft)' : 'var(--panel-strong)',
+                          background: config.service.type === t ? 'var(--accent-soft)' : 'var(--surface-elevated)',
                           color: config.service.type === t ? 'var(--accent-contrast)' : 'var(--text-muted)',
                           fontWeight: 600,
                           fontSize: '0.78rem',
@@ -1447,7 +1447,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            minHeight: '760px',
+            minHeight: '720px',
             boxShadow: 'var(--shadow)',
             border: '1px solid var(--border-subtle)',
           }}
@@ -1475,11 +1475,10 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       fontSize: '0.76rem',
                       fontWeight: 700,
                       border: 'none',
-                      borderRadius: '0.5rem 0.5rem 0 0',
+                      borderRadius: '999px',
                       cursor: 'pointer',
-                      background: active ? 'var(--surface-elevated)' : 'transparent',
+                      background: active ? 'var(--surface-contrast)' : 'transparent',
                       color: active ? 'var(--text)' : 'var(--text-muted)',
-                      borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
                       whiteSpace: 'nowrap',
                     }}
                   >
@@ -1507,7 +1506,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                         padding: '0.45rem 0.7rem',
                         fontSize: '0.74rem',
                         border: 'none',
-                        borderRadius: '0.45rem',
+                        borderRadius: '999px',
                         background: active ? 'var(--accent-soft)' : 'var(--surface-muted)',
                         color: disabled ? 'var(--text-muted)' : active ? 'var(--accent-contrast)' : 'var(--text-soft)',
                         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -1523,10 +1522,14 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                 <pre
                   style={{
                     margin: 0,
+                    padding: '0.95rem 1rem',
+                    borderRadius: '0.85rem',
+                    background: 'var(--code-surface)',
+                    border: '1px solid var(--code-border)',
                     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
                     fontSize: '0.78rem',
                     lineHeight: 1.7,
-                    color: 'var(--text)',
+                    color: 'var(--code-text)',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                   }}
@@ -1542,8 +1545,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
                     <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Результат проверки</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation?.engine === 'helm_lint' ? 'helm lint' : 'builtin'}</span>
-                      <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation ? (validation.valid ? 'VALID' : 'INVALID') : 'WAITING'}</span>
+                      <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation?.engine === 'helm lint' ? 'helm lint' : validation?.engine === 'helm_lint' ? 'helm lint' : 'builtin'}</span>
+                      <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation ? (validation.valid ? 'Прошло' : 'Ошибка') : 'Ожидает'}</span>
                     </div>
                   </div>
                   <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>

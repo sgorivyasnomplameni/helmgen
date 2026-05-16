@@ -38,7 +38,7 @@ export default function ToggleSwitch({ checked, onChange, label }: Props) {
             width: '20px',
             height: '20px',
             borderRadius: '50%',
-            background: 'var(--panel-strong)',
+            background: 'var(--surface-elevated)',
             transition: 'left 0.2s',
             boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
           }}

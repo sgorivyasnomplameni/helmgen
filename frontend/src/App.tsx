@@ -99,7 +99,7 @@ export default function App() {
           style={{
             maxWidth: '1680px',
             margin: '0 auto',
-            padding: '0.9rem 1.5rem',
+            padding: '0.8rem 1.5rem',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -165,11 +165,11 @@ export default function App() {
             <div
               style={{
                 display: 'inline-flex',
-                padding: '0.25rem',
-                background: 'var(--surface-contrast)',
-                borderRadius: '999px',
-                gap: '0.25rem',
+                gap: '0.1rem',
                 border: '1px solid var(--border-subtle)',
+                borderRadius: '999px',
+                padding: '0.15rem',
+                background: 'var(--surface-base)',
               }}
             >
               <button
@@ -178,11 +178,11 @@ export default function App() {
                 style={{
                   border: 'none',
                   borderRadius: '999px',
-                  padding: '0.6rem 1rem',
+                  padding: '0.55rem 0.95rem',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  background: view === 'generator' ? 'var(--surface-elevated)' : 'transparent',
-                  color: view === 'generator' ? 'var(--text)' : 'var(--text-soft)',
+                  background: view === 'generator' ? 'var(--surface-contrast)' : 'transparent',
+                  color: view === 'generator' ? 'var(--text)' : 'var(--text-muted)',
                 }}
               >
                 Генератор
@@ -193,11 +193,11 @@ export default function App() {
                 style={{
                   border: 'none',
                   borderRadius: '999px',
-                  padding: '0.6rem 1rem',
+                  padding: '0.55rem 0.95rem',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  background: view === 'ops' ? 'var(--surface-elevated)' : 'transparent',
-                  color: view === 'ops' ? 'var(--text)' : 'var(--text-soft)',
+                  background: view === 'ops' ? 'var(--surface-contrast)' : 'transparent',
+                  color: view === 'ops' ? 'var(--text)' : 'var(--text-muted)',
                 }}
               >
                 Проверка и deploy
@@ -210,11 +210,11 @@ export default function App() {
               style={{
                 border: '1px solid var(--border-subtle)',
                 borderRadius: '999px',
-                padding: '0.6rem 0.95rem',
+                padding: '0.55rem 0.95rem',
                 fontWeight: 700,
                 cursor: 'pointer',
-                background: view === 'history' ? 'var(--surface-elevated)' : 'transparent',
-                color: view === 'history' ? 'var(--text)' : 'var(--text-soft)',
+                background: view === 'history' ? 'var(--surface-contrast)' : 'transparent',
+                color: view === 'history' ? 'var(--text)' : 'var(--text-muted)',
               }}
             >
               История

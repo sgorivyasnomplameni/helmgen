@@ -47,9 +47,9 @@ const pageShell: React.CSSProperties = {
 }
 
 const card: React.CSSProperties = {
-  background: 'var(--panel)',
+  background: 'var(--surface-base)',
   borderRadius: '1rem',
-  border: '1px solid var(--border)',
+  border: '1px solid var(--border-subtle)',
   boxShadow: 'var(--shadow)',
 }
 
@@ -63,8 +63,8 @@ const actionButton: React.CSSProperties = {
 
 const subtleButton: React.CSSProperties = {
   ...actionButton,
-  border: '1px solid var(--border)',
-  background: 'var(--panel-strong)',
+  border: '1px solid var(--border-subtle)',
+  background: 'var(--surface-elevated)',
   color: 'var(--text-soft)',
 }
 
@@ -429,8 +429,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               color: 'var(--warning)',
             }
           : {
-              border: '1px solid var(--border)',
-              background: 'var(--panel-strong)',
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--surface-elevated)',
               color: 'var(--text-soft)',
             }
 
@@ -776,7 +776,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             ...card,
             marginBottom: '1rem',
             padding: '0.95rem 1.1rem',
-            background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, var(--panel)) 0%, var(--panel) 100%)',
+            background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--surface-base)) 0%, var(--surface-base) 100%)',
             border: '1px solid color-mix(in srgb, var(--accent) 32%, transparent)',
           }}
         >
@@ -816,7 +816,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
           ...card,
           padding: '1.15rem 1.2rem',
           marginBottom: '1.25rem',
-          background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
+          background: 'linear-gradient(180deg, var(--surface-base) 0%, var(--surface-muted) 100%)',
         }}
       >
         <div style={{ display: 'grid', gap: '1rem' }}>
@@ -844,8 +844,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                   : dryRunReady
                     ? 'var(--accent-soft)'
                     : templateReady
-                      ? 'var(--panel-contrast)'
-                      : 'var(--panel-strong)',
+                      ? 'var(--surface-contrast)'
+                      : 'var(--surface-elevated)',
                 color: deploySucceeded
                   ? 'var(--success)'
                   : dryRunReady
@@ -869,8 +869,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             style={{
               padding: '1rem',
               borderRadius: '0.95rem',
-              border: '1px solid var(--border)',
-              background: 'var(--panel-strong)',
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--surface-elevated)',
               display: 'grid',
               gap: '0.75rem',
             }}
@@ -930,8 +930,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                 onClick={() => void refreshClusterStatus()}
                 disabled={isLoadingClusterStatus}
                 style={{
-                  border: '1px solid var(--border)',
-                  background: 'var(--panel-strong)',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--surface-elevated)',
                   color: 'var(--text-soft)',
                   borderRadius: '999px',
                   padding: '0.38rem 0.7rem',
@@ -948,10 +948,10 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               <span style={{ padding: '0.38rem 0.65rem', borderRadius: '999px', background: clusterReady ? 'var(--success-soft)' : 'var(--warning-soft)', color: clusterReady ? 'var(--success)' : 'var(--warning)', fontSize: '0.78rem', fontWeight: 800 }}>
                 {clusterReady ? 'Кластер доступен' : 'Кластер недоступен'}
               </span>
-              <span style={{ padding: '0.38rem 0.65rem', borderRadius: '999px', background: clusterStatus?.helm_available ? 'var(--success-soft)' : 'var(--panel-strong)', color: clusterStatus?.helm_available ? 'var(--success)' : 'var(--text-soft)', fontSize: '0.78rem', fontWeight: 800 }}>
+              <span style={{ padding: '0.38rem 0.65rem', borderRadius: '999px', background: clusterStatus?.helm_available ? 'var(--success-soft)' : 'var(--surface-elevated)', color: clusterStatus?.helm_available ? 'var(--success)' : 'var(--text-soft)', fontSize: '0.78rem', fontWeight: 800 }}>
                 Helm {clusterStatus?.helm_available ? 'готов' : 'не найден'}
               </span>
-              <span style={{ padding: '0.38rem 0.65rem', borderRadius: '999px', background: clusterStatus?.current_context ? 'var(--panel-strong)' : 'var(--warning-soft)', color: clusterStatus?.current_context ? 'var(--text-soft)' : 'var(--warning)', fontSize: '0.78rem', fontWeight: 800 }}>
+              <span style={{ padding: '0.38rem 0.65rem', borderRadius: '999px', background: clusterStatus?.current_context ? 'var(--surface-elevated)' : 'var(--warning-soft)', color: clusterStatus?.current_context ? 'var(--text-soft)' : 'var(--warning)', fontSize: '0.78rem', fontWeight: 800 }}>
                 {clusterStatus?.current_context || 'Нет context'}
               </span>
             </div>
@@ -1020,8 +1020,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     width: '100%',
                     padding: '0.65rem 0.75rem',
                     borderRadius: '0.65rem',
-                    border: '1px solid var(--border)',
-                    background: 'var(--panel-strong)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--surface-elevated)',
                     color: 'var(--text)',
                     fontSize: '0.9rem',
                     boxSizing: 'border-box',
@@ -1039,8 +1039,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     width: '100%',
                     padding: '0.65rem 0.75rem',
                     borderRadius: '0.65rem',
-                    border: '1px solid var(--border)',
-                    background: 'var(--panel-strong)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--surface-elevated)',
                     color: 'var(--text)',
                     fontSize: '0.9rem',
                     boxSizing: 'border-box',
@@ -1056,8 +1056,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     gap: '0.65rem',
                     padding: '0.75rem 0.8rem',
                     borderRadius: '0.75rem',
-                    border: '1px solid var(--border)',
-                    background: 'var(--panel-strong)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--surface-elevated)',
                     color: 'var(--text-soft)',
                     fontSize: '0.82rem',
                     fontWeight: 700,
@@ -1092,8 +1092,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                         width: '100%',
                         padding: '0.65rem 0.75rem',
                         borderRadius: '0.65rem',
-                        border: '1px solid var(--border)',
-                        background: 'var(--panel-strong)',
+                        border: '1px solid var(--border-subtle)',
+                        background: 'var(--surface-elevated)',
                         color: 'var(--text)',
                         fontSize: '0.9rem',
                         boxSizing: 'border-box',
@@ -1195,7 +1195,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               style={{
                 marginTop: '0.95rem',
                 paddingTop: '0.9rem',
-                borderTop: '1px solid var(--border)',
+                borderTop: '1px solid var(--border-subtle)',
               }}
             >
               <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -1326,15 +1326,15 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               <div>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Helm Template</div>
+                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Helm Template</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: '#1e3a5f', color: '#dbeafe', fontSize: '0.76rem', fontWeight: 700 }}>helm template</span>
-                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: templateResult?.success ? '#14532d' : templateResult ? '#7f1d1d' : '#334155', color: '#f8fafc', fontSize: '0.76rem', fontWeight: 700 }}>
-                        {isTemplating ? 'RUNNING' : templateResult ? (templateResult.success ? 'RENDERED' : 'FAILED') : 'WAITING'}
+                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: 'var(--accent-soft)', color: 'var(--accent-contrast)', fontSize: '0.76rem', fontWeight: 700, border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' }}>helm template</span>
+                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: templateResult?.success ? 'var(--success-soft)' : templateResult ? 'var(--danger-soft)' : 'var(--surface-muted)', color: templateResult?.success ? 'var(--success)' : templateResult ? 'var(--danger)' : 'var(--text-soft)', fontSize: '0.76rem', fontWeight: 700, border: '1px solid var(--border-subtle)' }}>
+                        {isTemplating ? 'В работе' : templateResult ? (templateResult.success ? 'Готово' : 'Ошибка') : 'Ожидает'}
                       </span>
                     </div>
                   </div>
-                <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
                   {templateResult?.summary || 'После рендера здесь появятся итоговые Kubernetes-манифесты.'}
                 </div>
               </div>
@@ -1344,31 +1344,35 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     style={{
                       padding: '1rem',
                       borderRadius: '0.85rem',
-                      background: 'rgba(15, 23, 42, 0.35)',
-                      border: '1px solid rgba(96, 165, 250, 0.18)',
+                      background: 'var(--surface-muted)',
+                      border: '1px solid var(--border-subtle)',
                     }}
                   >
                     <Spinner label="Рендерим манифесты через helm template..." />
-                    <div style={{ marginTop: '0.7rem', color: '#94a3b8', fontSize: '0.84rem', lineHeight: 1.6 }}>
+                    <div style={{ marginTop: '0.7rem', color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.6 }}>
                       Когда рендер завершится, здесь появится итоговый YAML со всеми манифестами.
                     </div>
                   </div>
                 ) : !templateResult ? (
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Результат template пока пустой.</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Результат template пока пустой.</div>
                 ) : (
                   <>
                     {templateResult.errors.length > 0 && (
-                      <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
+                      <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
                         {templateResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                       </ul>
                     )}
                     <pre
                       style={{
                         margin: 0,
+                        padding: '0.95rem 1rem',
+                        borderRadius: '0.85rem',
+                        background: 'var(--code-surface)',
+                        border: '1px solid var(--code-border)',
                         fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
                         fontSize: '0.78rem',
                         lineHeight: 1.7,
-                        color: '#dbeafe',
+                        color: 'var(--code-text)',
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                       }}
@@ -1384,15 +1388,15 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               <div>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Dry-Run Deploy</div>
+                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Dry-Run Deploy</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: '#4c1d95', color: '#ede9fe', fontSize: '0.76rem', fontWeight: 700 }}>helm dry-run</span>
-                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: dryRunResult?.success ? '#14532d' : dryRunResult ? '#7f1d1d' : '#334155', color: '#f8fafc', fontSize: '0.76rem', fontWeight: 700 }}>
-                        {isDryRunning ? 'RUNNING' : dryRunResult ? (dryRunResult.success ? 'READY' : 'FAILED') : 'WAITING'}
+                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: 'var(--accent-soft)', color: 'var(--accent-contrast)', fontSize: '0.76rem', fontWeight: 700, border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' }}>helm dry-run</span>
+                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: dryRunResult?.success ? 'var(--success-soft)' : dryRunResult ? 'var(--danger-soft)' : 'var(--surface-muted)', color: dryRunResult?.success ? 'var(--success)' : dryRunResult ? 'var(--danger)' : 'var(--text-soft)', fontSize: '0.76rem', fontWeight: 700, border: '1px solid var(--border-subtle)' }}>
+                        {isDryRunning ? 'В работе' : dryRunResult ? (dryRunResult.success ? 'Готово' : 'Ошибка') : 'Ожидает'}
                       </span>
                     </div>
                   </div>
-                <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
                   {dryRunResult?.summary || 'Client-side dry-run проверит release с текущими namespace и release name до реального deploy.'}
                 </div>
               </div>
@@ -1402,17 +1406,17 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     style={{
                       padding: '1rem',
                       borderRadius: '0.85rem',
-                      background: 'rgba(15, 23, 42, 0.35)',
-                      border: '1px solid rgba(168, 85, 247, 0.2)',
+                      background: 'var(--surface-muted)',
+                      border: '1px solid var(--border-subtle)',
                     }}
                   >
                     <Spinner label="Запускаем dry-run проверку..." />
-                    <div style={{ marginTop: '0.7rem', color: '#94a3b8', fontSize: '0.84rem', lineHeight: 1.6 }}>
+                    <div style={{ marginTop: '0.7rem', color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.6 }}>
                       Backend выполняет client-side Helm dry-run с теми же параметрами release и namespace, которые будут использованы для реального deploy.
                     </div>
                   </div>
                 ) : !dryRunResult ? (
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Результат dry-run пока пустой.</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Результат dry-run пока пустой.</div>
                 ) : (
                   <>
                     {summarizeDryRunError(dryRunResult.errors) && (
@@ -1421,9 +1425,9 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                           marginBottom: '1rem',
                           padding: '0.85rem 1rem',
                           borderRadius: '0.8rem',
-                          background: '#312e81',
-                          border: '1px solid #8b5cf6',
-                          color: '#ddd6fe',
+                          background: 'color-mix(in srgb, var(--accent) 10%, var(--surface-base) 90%)',
+                          border: '1px solid color-mix(in srgb, var(--accent) 24%, var(--border-subtle) 76%)',
+                          color: 'var(--text-soft)',
                           fontSize: '0.84rem',
                           lineHeight: 1.55,
                         }}
@@ -1433,22 +1437,26 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     )}
 
                     <details>
-                      <summary style={{ cursor: 'pointer', color: '#c4b5fd', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.85rem' }}>
+                      <summary style={{ cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.85rem' }}>
                         Показать технические детали
                       </summary>
                       <div style={{ marginTop: '0.75rem' }}>
                         {dryRunResult.errors.length > 0 && (
-                          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
+                          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
                             {dryRunResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                           </ul>
                         )}
                         <pre
                           style={{
                             margin: 0,
+                            padding: '0.95rem 1rem',
+                            borderRadius: '0.85rem',
+                            background: 'var(--code-surface)',
+                            border: '1px solid var(--code-border)',
                             fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
                             fontSize: '0.78rem',
                             lineHeight: 1.7,
-                            color: '#e9d5ff',
+                            color: 'var(--code-text)',
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
                           }}
@@ -1466,15 +1474,15 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               <div>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Развёртывание</div>
+                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Развёртывание</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: '#14532d', color: '#dcfce7', fontSize: '0.76rem', fontWeight: 700 }}>helm deploy</span>
-                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: deployResult?.success ? '#14532d' : deployResult ? '#7f1d1d' : '#334155', color: '#f8fafc', fontSize: '0.76rem', fontWeight: 700 }}>
-                        {isDeploying ? 'RUNNING' : deployResult ? (deployResult.success ? 'DEPLOYED' : 'FAILED') : 'WAITING'}
+                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: 'var(--success-soft)', color: 'var(--success)', fontSize: '0.76rem', fontWeight: 700, border: '1px solid color-mix(in srgb, var(--success) 30%, transparent)' }}>helm deploy</span>
+                      <span style={{ padding: '0.45rem 0.7rem', borderRadius: '999px', background: deployResult?.success ? 'var(--success-soft)' : deployResult ? 'var(--danger-soft)' : 'var(--surface-muted)', color: deployResult?.success ? 'var(--success)' : deployResult ? 'var(--danger)' : 'var(--text-soft)', fontSize: '0.76rem', fontWeight: 700, border: '1px solid var(--border-subtle)' }}>
+                        {isDeploying ? 'В работе' : deployResult ? (deployResult.success ? 'Готово' : 'Ошибка') : 'Ожидает'}
                       </span>
                     </div>
                   </div>
-                <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
                   {deployResult?.summary || (clusterReady ? 'Развёртывание выполнит helm upgrade --install в указанный namespace.' : 'Backend пока не может подключиться к Kubernetes API, поэтому deploy недоступен.')}
                 </div>
               </div>
@@ -1484,15 +1492,15 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     style={{
                       padding: '1rem',
                       borderRadius: '0.85rem',
-                      background: 'rgba(15, 23, 42, 0.35)',
-                      border: '1px solid rgba(34, 197, 94, 0.2)',
+                      background: 'var(--surface-muted)',
+                      border: '1px solid var(--border-subtle)',
                     }}
                   >
                     <Spinner label="Выполняем helm upgrade --install..." />
-                    <div style={{ marginTop: '0.7rem', color: '#94a3b8', fontSize: '0.84rem', lineHeight: 1.6 }}>
+                    <div style={{ marginTop: '0.7rem', color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.6 }}>
                       Release <strong>{releaseName.trim() || chart?.name || 'release'}</strong> разворачивается в namespace <strong>{namespace.trim() || 'helmgen-demo'}</strong>.
                     </div>
-                    <div style={{ marginTop: '0.45rem', color: '#94a3b8', fontSize: '0.82rem' }}>
+                    <div style={{ marginTop: '0.45rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
                       Окно обновится автоматически, как только Helm вернёт результат.
                     </div>
                     <div style={{ marginTop: '0.7rem', color: activeOperationExpectationTone, fontSize: '0.83rem', lineHeight: 1.55, fontWeight: 700 }}>
@@ -1500,7 +1508,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
                   </div>
                 ) : !deployResult ? (
-                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Развёртывание ещё не запускалось.</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Развёртывание ещё не запускалось.</div>
                 ) : (
                   <>
                     <div
@@ -1508,9 +1516,9 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                         marginBottom: '1rem',
                         padding: '0.85rem 1rem',
                         borderRadius: '0.8rem',
-                        background: deployResult.success ? '#14532d' : '#312e81',
-                        border: `1px solid ${deployResult.success ? '#22c55e' : '#8b5cf6'}`,
-                        color: deployResult.success ? '#dcfce7' : '#ddd6fe',
+                        background: deployResult.success ? 'var(--success-soft)' : 'color-mix(in srgb, var(--accent) 10%, var(--surface-base) 90%)',
+                        border: `1px solid ${deployResult.success ? 'color-mix(in srgb, var(--success) 30%, transparent)' : 'color-mix(in srgb, var(--accent) 24%, var(--border-subtle) 76%)'}`,
+                        color: deployResult.success ? 'var(--success)' : 'var(--text-soft)',
                         fontSize: '0.84rem',
                         lineHeight: 1.55,
                       }}
@@ -1520,22 +1528,26 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
 
                     <details open={!deployResult.success}>
-                      <summary style={{ cursor: 'pointer', color: '#bbf7d0', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.85rem' }}>
+                      <summary style={{ cursor: 'pointer', color: deployResult.success ? 'var(--success)' : 'var(--accent-contrast)', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.85rem' }}>
                         Показать вывод развёртывания
                       </summary>
                       <div style={{ marginTop: '0.75rem' }}>
                         {deployResult.errors.length > 0 && (
-                          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
+                          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
                             {deployResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                           </ul>
                         )}
                         <pre
                           style={{
                             margin: 0,
+                            padding: '0.95rem 1rem',
+                            borderRadius: '0.85rem',
+                            background: 'var(--code-surface)',
+                            border: '1px solid var(--code-border)',
                             fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
                             fontSize: '0.78rem',
                             lineHeight: 1.7,
-                            color: '#bbf7d0',
+                            color: 'var(--code-text)',
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
                           }}

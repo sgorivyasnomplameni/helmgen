@@ -54,9 +54,9 @@ export default function AuditList({ title, events, emptyText }: AuditListProps) 
   return (
     <div
       style={{
-        background: 'var(--panel)',
+        background: 'var(--surface-base)',
         borderRadius: '1rem',
-        border: '1px solid var(--border)',
+        border: '1px solid var(--border-subtle)',
         boxShadow: 'var(--shadow)',
         padding: '1rem',
       }}
@@ -73,10 +73,10 @@ export default function AuditList({ title, events, emptyText }: AuditListProps) 
             <div
               key={event.id}
               style={{
-                border: '1px solid var(--border)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '0.85rem',
                 padding: '0.85rem',
-                background: 'var(--panel-muted)',
+                background: 'var(--surface-muted)',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', alignItems: 'center' }}>
@@ -92,7 +92,7 @@ export default function AuditList({ title, events, emptyText }: AuditListProps) 
                         ? 'var(--success-soft)'
                         : event.status === 'error'
                           ? 'var(--danger-soft)'
-                          : 'var(--panel-contrast)',
+                          : 'var(--surface-contrast)',
                     color:
                       event.status === 'success'
                         ? 'var(--success)'

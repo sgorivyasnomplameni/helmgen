@@ -34,19 +34,6 @@
   --code-border: rgba(21, 32, 51, 0.12);
   --code-text: #edf4ff;
   --code-muted: #9fb0c7;
-
-  /* Compatibility aliases while components migrate to the normalized scale. */
-  --panel: var(--surface-base);
-  --panel-muted: var(--surface-muted);
-  --panel-strong: var(--surface-elevated);
-  --panel-contrast: var(--surface-contrast);
-  --border: var(--border-subtle);
-  --workspace-bg: var(--surface-base);
-  --workspace-surface: var(--surface-elevated);
-  --workspace-surface-2: var(--surface-muted);
-  --workspace-border: var(--border-subtle);
-  --workspace-text: var(--text);
-  --workspace-muted: var(--text-muted);
 }
 
 [data-theme='dark'] {
@@ -81,19 +68,6 @@
   --code-border: rgba(96, 165, 250, 0.12);
   --code-text: #edf4ff;
   --code-muted: #8ea0b9;
-
-  /* Compatibility aliases while components migrate to the normalized scale. */
-  --panel: var(--surface-base);
-  --panel-muted: var(--surface-muted);
-  --panel-strong: var(--surface-elevated);
-  --panel-contrast: var(--surface-contrast);
-  --border: var(--border-subtle);
-  --workspace-bg: var(--surface-base);
-  --workspace-surface: var(--surface-elevated);
-  --workspace-surface-2: var(--surface-muted);
-  --workspace-border: var(--border-subtle);
-  --workspace-text: var(--text);
-  --workspace-muted: var(--text-muted);
 }
 
 html, body, #root {

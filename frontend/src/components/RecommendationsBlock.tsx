@@ -116,17 +116,17 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
     warningCount === 0
       ? 'var(--success-soft)'
       : hasCritical
-        ? 'color-mix(in srgb, var(--danger) 14%, var(--panel) 86%)'
+        ? 'color-mix(in srgb, var(--danger) 8%, var(--surface-base) 92%)'
         : warningCount <= 2
-          ? 'var(--panel-strong)'
-          : 'color-mix(in srgb, var(--warning-soft) 65%, var(--panel) 35%)'
+          ? 'var(--surface-elevated)'
+          : 'color-mix(in srgb, var(--warning) 8%, var(--surface-base) 92%)'
 
   if (variant === 'sidebar') {
     return (
       <div
         style={{
-          background: 'linear-gradient(180deg, color-mix(in srgb, var(--panel) 88%, transparent) 0%, var(--panel-muted) 100%)',
-          border: '1px solid var(--border)',
+          background: 'var(--surface-base)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '1rem',
           padding: '1rem',
           boxShadow: 'var(--shadow)',
@@ -147,6 +147,7 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
               color: 'var(--warning)',
               whiteSpace: 'nowrap',
               visibility: loading ? 'visible' : 'hidden',
+              opacity: 0.75,
             }}
           >
               обновление...
@@ -158,8 +159,8 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
             style={{
               padding: '0.8rem',
               borderRadius: '0.85rem',
-              background: 'var(--panel-strong)',
-              border: '1px solid var(--border)',
+              background: 'var(--surface-elevated)',
+              border: '1px solid var(--border-subtle)',
             }}
           >
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -174,7 +175,7 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
               padding: '0.8rem',
               borderRadius: '0.85rem',
               background: readinessBackground,
-              border: '1px solid var(--border)',
+              border: '1px solid var(--border-subtle)',
             }}
           >
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: readinessColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -203,7 +204,7 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
                 padding: '0.8rem',
                 borderRadius: '0.85rem',
                 background: 'var(--success-soft)',
-                border: '1px solid var(--border)',
+                border: '1px solid color-mix(in srgb, var(--success) 22%, var(--border-subtle) 78%)',
               }}
             >
               <CheckIcon />
@@ -226,14 +227,14 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
                   gap: '0.65rem',
                   padding: '0.8rem',
                   borderRadius: '0.85rem',
-                  background: 'var(--panel-strong)',
-                  border: '1px solid var(--border)',
-                  boxShadow: `inset 2px 0 0 ${
+                  background: 'var(--surface-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  boxShadow: `inset 3px 0 0 ${
                     rec.severity === 'critical'
-                      ? 'color-mix(in srgb, var(--danger) 80%, transparent)'
+                      ? 'color-mix(in srgb, var(--danger) 65%, transparent)'
                       : rec.severity === 'warning'
-                        ? 'color-mix(in srgb, var(--warning) 80%, transparent)'
-                        : 'color-mix(in srgb, var(--accent) 70%, transparent)'
+                        ? 'color-mix(in srgb, var(--warning) 65%, transparent)'
+                        : 'color-mix(in srgb, var(--accent) 55%, transparent)'
                   }`,
                 }}
               >
@@ -269,10 +270,10 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
   }
 
   return (
-    <div
+      <div
       style={{
-        background: 'linear-gradient(135deg, var(--panel-muted) 0%, var(--panel) 100%)',
-        border: '1px solid var(--border)',
+        background: 'var(--surface-base)',
+        border: '1px solid var(--border-subtle)',
         borderRadius: '0.95rem',
         padding: '1.35rem',
         boxShadow: 'var(--shadow)',
@@ -305,7 +306,7 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
             padding: '0.9rem 1rem',
             borderRadius: '0.85rem',
             background: 'var(--success-soft)',
-            border: '1px solid var(--border)',
+            border: '1px solid color-mix(in srgb, var(--success) 22%, var(--border-subtle) 78%)',
           }}
         >
           <CheckIcon />
@@ -329,13 +330,15 @@ function RecommendationsBlock({ config, variant = 'default' }: Props) {
                 gap: '0.7rem',
                 padding: '0.9rem 1rem',
                 borderRadius: '0.85rem',
-                background:
+                background: 'var(--surface-elevated)',
+                border: '1px solid var(--border-subtle)',
+                boxShadow: `inset 3px 0 0 ${
                   rec.severity === 'critical'
-                    ? 'color-mix(in srgb, var(--danger) 10%, var(--panel) 90%)'
+                    ? 'color-mix(in srgb, var(--danger) 65%, transparent)'
                     : rec.severity === 'warning'
-                      ? 'var(--warning-soft)'
-                      : 'color-mix(in srgb, var(--accent) 10%, var(--panel) 90%)',
-                border: '1px solid var(--border)',
+                      ? 'color-mix(in srgb, var(--warning) 65%, transparent)'
+                      : 'color-mix(in srgb, var(--accent) 55%, transparent)'
+                }`,
               }}
             >
               <WarningIcon />
