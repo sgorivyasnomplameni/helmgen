@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tarfile
@@ -126,6 +127,10 @@ class ClusterStatusResult(BaseModel):
     summary: str = ""
 
 
+_DNS_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+_DNS_SUBDOMAIN_RE = re.compile(r"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$")
+
+
 def _resolve_helm_binary() -> str | None:
     helm_bin = os.getenv("HELM_BIN", "helm")
     resolved = shutil.which(helm_bin)
@@ -144,6 +149,32 @@ def _resolve_kubectl_binary() -> str | None:
     if os.path.sep in kubectl_bin and os.path.exists(kubectl_bin):
         return kubectl_bin
     return None
+
+
+def _normalize_namespace(value: str | None, default: str) -> str:
+    normalized = (value or "").strip()
+    return normalized or default
+
+
+def _normalize_release_name(value: str | None, default: str) -> str:
+    normalized = (value or "").strip()
+    return normalized or default
+
+
+def _validate_k8s_target(*, namespace: str, release_name: str) -> list[str]:
+    errors: list[str] = []
+
+    if len(namespace) > 63 or not _DNS_LABEL_RE.fullmatch(namespace):
+        errors.append(
+            "Namespace должен соответствовать Kubernetes DNS label: lowercase, цифры и дефисы, до 63 символов."
+        )
+
+    if len(release_name) > 53 or not _DNS_SUBDOMAIN_RE.fullmatch(release_name):
+        errors.append(
+            "Release name должен соответствовать Helm DNS subdomain: lowercase, цифры, дефисы и точки, до 53 символов."
+        )
+
+    return errors
 
 
 def _extract_chart(chart, target_dir: str) -> str:
@@ -447,7 +478,7 @@ def render_chart_template(chart) -> TemplateResult:
     )
 
 
-def dry_run_deploy_chart(chart) -> DryRunDeployResult:
+def dry_run_deploy_chart(chart, namespace: str, release_name: str | None = None) -> DryRunDeployResult:
     if not chart.generated_yaml:
         return DryRunDeployResult(
             success=False,
@@ -469,10 +500,21 @@ def dry_run_deploy_chart(chart) -> DryRunDeployResult:
             summary="Dry-run deploy недоступен без Helm CLI",
         )
 
+    final_release_name = _normalize_release_name(release_name, f"{chart.name or 'chart'}-release")
+    final_namespace = _normalize_namespace(namespace, "helmgen-preview")
+    target_errors = _validate_k8s_target(namespace=final_namespace, release_name=final_release_name)
+    if target_errors:
+        return DryRunDeployResult(
+            success=False,
+            output="",
+            errors=target_errors,
+            warnings=[],
+            engine="helm_dry_run",
+            summary="Dry-run deploy остановлен из-за некорректных параметров release или namespace",
+        )
+
     with tempfile.TemporaryDirectory() as tmpdir:
         chart_dir = _extract_chart(chart, tmpdir)
-        release_name = f"{chart.name or 'chart'}-release"
-        namespace = "helmgen-preview"
 
         try:
             completed = subprocess.run(
@@ -480,10 +522,10 @@ def dry_run_deploy_chart(chart) -> DryRunDeployResult:
                     helm_bin,
                     "upgrade",
                     "--install",
-                    release_name,
+                    final_release_name,
                     chart_dir,
                     "--namespace",
-                    namespace,
+                    final_namespace,
                     "--create-namespace",
                     "--dry-run=client",
                     "--debug",
@@ -550,18 +592,33 @@ def deploy_chart(chart, namespace: str, release_name: str | None = None) -> Depl
         )
 
     helm_bin = _resolve_helm_binary()
-    final_release_name = release_name or f"{chart.name or 'chart'}-release"
+    final_release_name = _normalize_release_name(release_name, f"{chart.name or 'chart'}-release")
+    final_namespace = _normalize_namespace(namespace, "helmgen-demo")
     if not helm_bin:
         return DeployResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output="",
             errors=["Helm CLI не найден в окружении backend"],
             warnings=["Установите Helm или укажите путь через HELM_BIN для включения реального deploy"],
             status="failed",
             engine="helm_deploy",
             summary="Deploy недоступен без Helm CLI",
+        )
+
+    target_errors = _validate_k8s_target(namespace=final_namespace, release_name=final_release_name)
+    if target_errors:
+        return DeployResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=final_namespace,
+            output="",
+            errors=target_errors,
+            warnings=[],
+            status="failed",
+            engine="helm_deploy",
+            summary="Deploy остановлен из-за некорректных параметров release или namespace",
         )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -576,7 +633,7 @@ def deploy_chart(chart, namespace: str, release_name: str | None = None) -> Depl
                     final_release_name,
                     chart_dir,
                     "--namespace",
-                    namespace,
+                    final_namespace,
                     "--create-namespace",
                     "--wait",
                     "--timeout",
@@ -591,7 +648,7 @@ def deploy_chart(chart, namespace: str, release_name: str | None = None) -> Depl
             return DeployResult(
                 success=False,
                 release_name=final_release_name,
-                namespace=namespace,
+                namespace=final_namespace,
                 output="",
                 errors=[f"Не удалось выполнить deploy: {exc}"],
                 warnings=[],
@@ -605,7 +662,7 @@ def deploy_chart(chart, namespace: str, release_name: str | None = None) -> Depl
         return DeployResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output="",
             errors=["Helm CLI найден, но не смог запуститься в текущем окружении"],
             warnings=stderr_lines,
@@ -619,7 +676,7 @@ def deploy_chart(chart, namespace: str, release_name: str | None = None) -> Depl
         return DeployResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output=combined_output,
             errors=stderr_lines or ["helm deploy завершился с ошибкой"],
             warnings=[],
@@ -631,7 +688,7 @@ def deploy_chart(chart, namespace: str, release_name: str | None = None) -> Depl
     return DeployResult(
         success=True,
         release_name=final_release_name,
-        namespace=namespace,
+        namespace=final_namespace,
         output=combined_output,
         errors=[],
         warnings=stderr_lines,
@@ -643,12 +700,16 @@ def deploy_chart(chart, namespace: str, release_name: str | None = None) -> Depl
 
 def release_status_chart(chart, namespace: str, release_name: str | None = None) -> ReleaseStatusResult:
     helm_bin = _resolve_helm_binary()
-    final_release_name = release_name or getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release"
+    final_release_name = _normalize_release_name(
+        release_name,
+        getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release",
+    )
+    final_namespace = _normalize_namespace(namespace, "helmgen-demo")
     if not helm_bin:
         return ReleaseStatusResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output="",
             errors=["Helm CLI не найден в окружении backend"],
             warnings=["Установите Helm или укажите путь через HELM_BIN для просмотра статуса release"],
@@ -657,12 +718,26 @@ def release_status_chart(chart, namespace: str, release_name: str | None = None)
             summary="Статус release недоступен без Helm CLI",
         )
 
+    target_errors = _validate_k8s_target(namespace=final_namespace, release_name=final_release_name)
+    if target_errors:
+        return ReleaseStatusResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=final_namespace,
+            output="",
+            errors=target_errors,
+            warnings=[],
+            status="unknown",
+            engine="helm_status",
+            summary="Статус release не получен из-за некорректных параметров release или namespace",
+        )
+
     command = [
         helm_bin,
         "status",
         final_release_name,
         "--namespace",
-        namespace,
+        final_namespace,
         "--show-resources",
     ]
     try:
@@ -685,7 +760,7 @@ def release_status_chart(chart, namespace: str, release_name: str | None = None)
         return ReleaseStatusResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output="",
             errors=[f"Не удалось получить статус release: {exc}"],
             warnings=[],
@@ -701,7 +776,7 @@ def release_status_chart(chart, namespace: str, release_name: str | None = None)
         return ReleaseStatusResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output=combined_output,
             errors=["Helm CLI найден, но не смог подключиться к Kubernetes"],
             warnings=stderr_lines,
@@ -714,7 +789,7 @@ def release_status_chart(chart, namespace: str, release_name: str | None = None)
         return ReleaseStatusResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output=combined_output,
             errors=stderr_lines or ["helm status завершился с ошибкой"],
             warnings=[],
@@ -728,7 +803,7 @@ def release_status_chart(chart, namespace: str, release_name: str | None = None)
     return ReleaseStatusResult(
         success=True,
         release_name=final_release_name,
-        namespace=namespace,
+        namespace=final_namespace,
         output=combined_output,
         errors=[],
         warnings=stderr_lines,
@@ -739,8 +814,12 @@ def release_status_chart(chart, namespace: str, release_name: str | None = None)
 
 
 def monitor_release_chart(chart, namespace: str, release_name: str | None = None) -> MonitoringResult:
-    final_release_name = release_name or getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release"
-    status_result = release_status_chart(chart, namespace=namespace, release_name=final_release_name)
+    final_release_name = _normalize_release_name(
+        release_name,
+        getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release",
+    )
+    final_namespace = _normalize_namespace(namespace, "helmgen-demo")
+    status_result = release_status_chart(chart, namespace=final_namespace, release_name=final_release_name)
     kubectl_bin = _resolve_kubectl_binary()
     warnings = list(status_result.warnings)
     errors = list(status_result.errors)
@@ -754,7 +833,7 @@ def monitor_release_chart(chart, namespace: str, release_name: str | None = None
         return MonitoringResult(
             success=status_result.success,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output="\n\n".join(output_parts),
             errors=errors,
             warnings=warnings,
@@ -771,7 +850,7 @@ def monitor_release_chart(chart, namespace: str, release_name: str | None = None
                 "get",
                 "all",
                 "-n",
-                namespace,
+                final_namespace,
                 "-l",
                 f"app.kubernetes.io/instance={final_release_name}",
                 "-o",
@@ -785,7 +864,7 @@ def monitor_release_chart(chart, namespace: str, release_name: str | None = None
                 "get",
                 "events",
                 "-n",
-                namespace,
+                final_namespace,
                 "--sort-by=.lastTimestamp",
             ],
         ),
@@ -816,7 +895,7 @@ def monitor_release_chart(chart, namespace: str, release_name: str | None = None
     return MonitoringResult(
         success=success,
         release_name=final_release_name,
-        namespace=namespace,
+        namespace=final_namespace,
         output="\n\n".join(output_parts),
         errors=errors,
         warnings=warnings,
@@ -832,12 +911,16 @@ def monitor_release_chart(chart, namespace: str, release_name: str | None = None
 
 def release_history_chart(chart, namespace: str, release_name: str | None = None) -> ReleaseHistoryResult:
     helm_bin = _resolve_helm_binary()
-    final_release_name = release_name or getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release"
+    final_release_name = _normalize_release_name(
+        release_name,
+        getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release",
+    )
+    final_namespace = _normalize_namespace(namespace, "helmgen-demo")
     if not helm_bin:
         return ReleaseHistoryResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             entries=[],
             output="",
             errors=["Helm CLI не найден в окружении backend"],
@@ -846,7 +929,21 @@ def release_history_chart(chart, namespace: str, release_name: str | None = None
             summary="История Helm недоступна без Helm CLI",
         )
 
-    command = [helm_bin, "history", final_release_name, "--namespace", namespace, "-o", "json"]
+    target_errors = _validate_k8s_target(namespace=final_namespace, release_name=final_release_name)
+    if target_errors:
+        return ReleaseHistoryResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=final_namespace,
+            entries=[],
+            output="",
+            errors=target_errors,
+            warnings=[],
+            engine="helm_history",
+            summary="История Helm недоступна из-за некорректных параметров release или namespace",
+        )
+
+    command = [helm_bin, "history", final_release_name, "--namespace", final_namespace, "-o", "json"]
     try:
         completed = subprocess.run(
             command,
@@ -859,7 +956,7 @@ def release_history_chart(chart, namespace: str, release_name: str | None = None
         return ReleaseHistoryResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             entries=[],
             output="",
             errors=[f"Не удалось получить историю release: {exc}"],
@@ -875,7 +972,7 @@ def release_history_chart(chart, namespace: str, release_name: str | None = None
         return ReleaseHistoryResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             entries=[],
             output=combined_output,
             errors=["Helm CLI найден, но не смог подключиться к Kubernetes"],
@@ -888,7 +985,7 @@ def release_history_chart(chart, namespace: str, release_name: str | None = None
         return ReleaseHistoryResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             entries=[],
             output=combined_output,
             errors=stderr_lines or ["helm history завершился с ошибкой"],
@@ -903,7 +1000,7 @@ def release_history_chart(chart, namespace: str, release_name: str | None = None
         return ReleaseHistoryResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             entries=[],
             output=combined_output,
             errors=["Helm history вернул неожиданный формат ответа"],
@@ -940,7 +1037,7 @@ def release_history_chart(chart, namespace: str, release_name: str | None = None
     return ReleaseHistoryResult(
         success=True,
         release_name=final_release_name,
-        namespace=namespace,
+        namespace=final_namespace,
         entries=entries,
         output=completed.stdout.strip(),
         errors=[],
@@ -952,12 +1049,16 @@ def release_history_chart(chart, namespace: str, release_name: str | None = None
 
 def rollback_chart(chart, namespace: str, release_name: str | None = None, revision: int | None = None) -> RollbackResult:
     helm_bin = _resolve_helm_binary()
-    final_release_name = release_name or getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release"
+    final_release_name = _normalize_release_name(
+        release_name,
+        getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release",
+    )
+    final_namespace = _normalize_namespace(namespace, "helmgen-demo")
     if not helm_bin:
         return RollbackResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             revision=revision,
             output="",
             errors=["Helm CLI не найден в окружении backend"],
@@ -967,10 +1068,25 @@ def rollback_chart(chart, namespace: str, release_name: str | None = None, revis
             summary="Rollback недоступен без Helm CLI",
         )
 
+    target_errors = _validate_k8s_target(namespace=final_namespace, release_name=final_release_name)
+    if target_errors:
+        return RollbackResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=final_namespace,
+            revision=revision,
+            output="",
+            errors=target_errors,
+            warnings=[],
+            status="failed",
+            engine="helm_rollback",
+            summary="Rollback остановлен из-за некорректных параметров release или namespace",
+        )
+
     command = [helm_bin, "rollback", final_release_name]
     if revision is not None:
         command.append(str(revision))
-    command.extend(["--namespace", namespace, "--wait"])
+    command.extend(["--namespace", final_namespace, "--wait"])
 
     try:
         completed = subprocess.run(
@@ -984,7 +1100,7 @@ def rollback_chart(chart, namespace: str, release_name: str | None = None, revis
         return RollbackResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             revision=revision,
             output="",
             errors=[f"Не удалось выполнить rollback: {exc}"],
@@ -1001,7 +1117,7 @@ def rollback_chart(chart, namespace: str, release_name: str | None = None, revis
         return RollbackResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             revision=revision,
             output=combined_output,
             errors=["Helm CLI найден, но не смог подключиться к Kubernetes"],
@@ -1015,7 +1131,7 @@ def rollback_chart(chart, namespace: str, release_name: str | None = None, revis
         return RollbackResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             revision=revision,
             output=combined_output,
             errors=stderr_lines or ["helm rollback завершился с ошибкой"],
@@ -1028,7 +1144,7 @@ def rollback_chart(chart, namespace: str, release_name: str | None = None, revis
     return RollbackResult(
         success=True,
         release_name=final_release_name,
-        namespace=namespace,
+        namespace=final_namespace,
         revision=revision,
         output=combined_output,
         errors=[],
@@ -1041,17 +1157,34 @@ def rollback_chart(chart, namespace: str, release_name: str | None = None, revis
 
 def uninstall_chart(chart, namespace: str, release_name: str | None = None) -> UninstallResult:
     helm_bin = _resolve_helm_binary()
-    final_release_name = release_name or getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release"
+    final_release_name = _normalize_release_name(
+        release_name,
+        getattr(chart, "deployed_release_name", None) or f"{chart.name or 'chart'}-release",
+    )
+    final_namespace = _normalize_namespace(namespace, "helmgen-demo")
     if not helm_bin:
         return UninstallResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output="",
             errors=["Helm CLI не найден в окружении backend"],
             warnings=["Установите Helm или укажите путь через HELM_BIN для включения удаления release"],
             engine="helm_uninstall",
             summary="Удаление release недоступно без Helm CLI",
+        )
+
+    target_errors = _validate_k8s_target(namespace=final_namespace, release_name=final_release_name)
+    if target_errors:
+        return UninstallResult(
+            success=False,
+            release_name=final_release_name,
+            namespace=final_namespace,
+            output="",
+            errors=target_errors,
+            warnings=[],
+            engine="helm_uninstall",
+            summary="Удаление release остановлено из-за некорректных параметров release или namespace",
         )
 
     try:
@@ -1061,7 +1194,7 @@ def uninstall_chart(chart, namespace: str, release_name: str | None = None) -> U
                 "uninstall",
                 final_release_name,
                 "--namespace",
-                namespace,
+                final_namespace,
                 "--wait",
             ],
             capture_output=True,
@@ -1073,7 +1206,7 @@ def uninstall_chart(chart, namespace: str, release_name: str | None = None) -> U
         return UninstallResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output="",
             errors=[f"Не удалось выполнить удаление release: {exc}"],
             warnings=[],
@@ -1088,7 +1221,7 @@ def uninstall_chart(chart, namespace: str, release_name: str | None = None) -> U
         return UninstallResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output=combined_output,
             errors=["Helm CLI найден, но не смог запуститься в текущем окружении"],
             warnings=stderr_lines,
@@ -1100,7 +1233,7 @@ def uninstall_chart(chart, namespace: str, release_name: str | None = None) -> U
         return UninstallResult(
             success=False,
             release_name=final_release_name,
-            namespace=namespace,
+            namespace=final_namespace,
             output=combined_output,
             errors=stderr_lines or ["helm uninstall завершился с ошибкой"],
             warnings=[],
@@ -1111,7 +1244,7 @@ def uninstall_chart(chart, namespace: str, release_name: str | None = None) -> U
     return UninstallResult(
         success=True,
         release_name=final_release_name,
-        namespace=namespace,
+        namespace=final_namespace,
         output=combined_output,
         errors=[],
         warnings=stderr_lines,

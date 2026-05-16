@@ -121,7 +121,7 @@ def test_dry_run_reports_missing_helm(monkeypatch) -> None:
     chart = _build_chart()
     monkeypatch.setattr(chart_renderer, "_resolve_helm_binary", lambda: None)
 
-    result = dry_run_deploy_chart(chart)
+    result = dry_run_deploy_chart(chart, namespace="helmgen-preview")
 
     assert result.success is False
     assert any("Helm CLI" in item for item in result.errors)
@@ -140,7 +140,7 @@ def test_dry_run_returns_output(monkeypatch) -> None:
         ),
     )
 
-    result = dry_run_deploy_chart(chart)
+    result = dry_run_deploy_chart(chart, namespace="helmgen-preview")
 
     assert result.success is True
     assert result.engine == "helm_dry_run"
@@ -160,10 +160,43 @@ def test_dry_run_returns_helm_errors(monkeypatch) -> None:
         ),
     )
 
-    result = dry_run_deploy_chart(chart)
+    result = dry_run_deploy_chart(chart, namespace="helmgen-preview")
 
     assert result.success is False
     assert any("invalid values" in item for item in result.errors)
+
+
+def test_dry_run_uses_requested_namespace_and_release(monkeypatch) -> None:
+    chart = _build_chart()
+    calls: list[list[str]] = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return SimpleNamespace(
+            returncode=0,
+            stdout='Release "demo-custom" has been upgraded. Happy Helming!',
+            stderr="client-side dry run",
+        )
+
+    monkeypatch.setattr(chart_renderer, "_resolve_helm_binary", lambda: "/usr/bin/helm")
+    monkeypatch.setattr(chart_renderer.subprocess, "run", fake_run)
+
+    result = dry_run_deploy_chart(chart, namespace="demo-preview", release_name="demo-custom")
+
+    assert result.success is True
+    assert "--namespace" in calls[0]
+    assert "demo-preview" in calls[0]
+    assert "demo-custom" in calls[0]
+
+
+def test_dry_run_validates_namespace_and_release_name(monkeypatch) -> None:
+    chart = _build_chart()
+    monkeypatch.setattr(chart_renderer, "_resolve_helm_binary", lambda: "/usr/bin/helm")
+
+    result = dry_run_deploy_chart(chart, namespace="INVALID_NAMESPACE", release_name="Bad Release")
+
+    assert result.success is False
+    assert any("Namespace" in item or "Release name" in item for item in result.errors)
 
 
 def test_deploy_reports_missing_helm(monkeypatch) -> None:
@@ -217,6 +250,17 @@ def test_deploy_returns_helm_errors(monkeypatch) -> None:
     assert result.success is False
     assert result.status == "failed"
     assert any("cluster unreachable" in item.lower() for item in result.errors)
+
+
+def test_deploy_validates_namespace_and_release_name(monkeypatch) -> None:
+    chart = _build_chart()
+    monkeypatch.setattr(chart_renderer, "_resolve_helm_binary", lambda: "/usr/bin/helm")
+
+    result = deploy_chart(chart, namespace="Invalid.Namespace", release_name="Bad Release")
+
+    assert result.success is False
+    assert result.status == "failed"
+    assert any("Namespace" in item or "Release name" in item for item in result.errors)
 
 
 def test_release_status_returns_output(monkeypatch) -> None:

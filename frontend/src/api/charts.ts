@@ -62,6 +62,11 @@ export interface ChartDryRunResult {
   summary: string
 }
 
+export interface ChartDryRunRequest {
+  namespace: string
+  release_name?: string
+}
+
 export interface ChartDeployRequest {
   namespace: string
   release_name?: string
@@ -222,8 +227,8 @@ export const chartsApi = {
   template: (id: number) =>
     api.post<ChartTemplateResult>(`/charts/${id}/template`, undefined, { timeout: 30000 }).then(r => r.data),
 
-  dryRunDeploy: (id: number) =>
-    api.post<ChartDryRunResult>(`/charts/${id}/deploy/dry-run`, undefined, { timeout: 45000 }).then(r => r.data),
+  dryRunDeploy: (id: number, data: ChartDryRunRequest) =>
+    api.post<ChartDryRunResult>(`/charts/${id}/deploy/dry-run`, data, { timeout: 45000 }).then(r => r.data),
 
   deploy: (id: number, data: ChartDeployRequest) =>
     api.post<ChartDeployResult>(`/charts/${id}/deploy`, data, { timeout: 160000 }).then(r => r.data),

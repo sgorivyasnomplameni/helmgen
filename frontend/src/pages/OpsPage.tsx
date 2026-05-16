@@ -94,7 +94,7 @@ function Spinner({ label = 'Загрузка' }: { label?: string }) {
 function summarizeDryRunError(errors: string[]): string | null {
   const clusterError = errors.find(error => error.includes('Kubernetes cluster unreachable'))
   if (clusterError) {
-    return 'Kubernetes-кластер недоступен. Dry-run требует активного kube-context.'
+    return 'Kubernetes-кластер недоступен. Для client-side dry-run это обычно не критично, но chart может зависеть от cluster-specific данных.'
   }
 
   return errors[0] ?? null
@@ -103,7 +103,7 @@ function summarizeDryRunError(errors: string[]): string | null {
 function summarizeClusterError(errors: string[]): string | null {
   const clusterError = errors.find(error => error.includes('Kubernetes'))
   if (clusterError) {
-    return 'Backend не может подключиться к Kubernetes API. Dry-run, deploy и удаление release сейчас недоступны.'
+    return 'Backend не может подключиться к Kubernetes API. Реальный deploy-контур сейчас недоступен, но template и client-side dry-run всё ещё можно использовать.'
   }
 
   return errors[0] ?? null
@@ -341,6 +341,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
   const isRollingBack = activeOperation === 'rollback'
   const isCheckingReleaseStatus = activeOperation === 'release-status'
   const isUninstalling = activeOperation === 'uninstall'
+  const canDryRun = !isDryRunning
   const canDeploy = clusterReady && deployConfirmed && !isDeploying
   const canRollback = clusterReady && rollbackConfirmed && !isRollingBack
 
@@ -406,7 +407,10 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
     setTab('dry-run')
     setDryRunResult(null)
     try {
-      const result = await chartsApi.dryRunDeploy(activeChartId)
+      const result = await chartsApi.dryRunDeploy(activeChartId, {
+        namespace: namespace.trim() || 'helmgen-preview',
+        release_name: releaseName.trim() || undefined,
+      })
       setDryRunResult(result)
       const updated = await chartsApi.get(activeChartId)
       setChart(updated)
@@ -846,13 +850,13 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
           <button
             type="button"
             onClick={() => void handleDryRunDeploy()}
-            disabled={isDryRunning || !clusterReady}
+            disabled={!canDryRun}
             style={{
               ...actionButton,
               border: '1px solid var(--border)',
               background: 'var(--panel-strong)',
-              color: isDryRunning || !clusterReady ? 'var(--text-muted)' : 'var(--text-soft)',
-              cursor: isDryRunning || !clusterReady ? 'not-allowed' : 'pointer',
+              color: !canDryRun ? 'var(--text-muted)' : 'var(--text-soft)',
+              cursor: !canDryRun ? 'not-allowed' : 'pointer',
             }}
           >
             {isDryRunning ? 'Dry-run...' : 'Dry-run'}
@@ -1107,7 +1111,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               )}
               {clusterBlockingReason && (
                 <div style={{ color: 'var(--warning)', fontWeight: 700, lineHeight: 1.5 }}>
-                  Deploy и dry-run сейчас недоступны: backend не видит рабочий kube-context.
+                  Реальный deploy-контур сейчас недоступен: backend не видит рабочий kube-context. Template и client-side dry-run можно использовать дальше.
                 </div>
               )}
             </div>
@@ -1261,7 +1265,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
                   </div>
                 <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
-                  {dryRunResult?.summary || (clusterReady ? 'Dry-run покажет, готов ли chart к шагу развёртывания.' : 'Сначала нужен доступный Kubernetes-контекст на стороне backend.')}
+                  {dryRunResult?.summary || 'Client-side dry-run проверит release с текущими namespace и release name до реального deploy.'}
                 </div>
               </div>
 
@@ -1276,7 +1280,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                   >
                     <Spinner label="Запускаем dry-run проверку..." />
                     <div style={{ marginTop: '0.7rem', color: '#94a3b8', fontSize: '0.84rem', lineHeight: 1.6 }}>
-                      Backend отправил helm-команду и ждёт ответ от Kubernetes. После завершения здесь появится итог и технический вывод.
+                      Backend выполняет client-side Helm dry-run с теми же параметрами release и namespace, которые будут использованы для реального deploy.
                     </div>
                   </div>
                 ) : !dryRunResult ? (

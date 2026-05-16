@@ -10,6 +10,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.chart import (
     ChartCreate,
+    ChartDryRunRequest,
     ChartDeployRequest,
     ChartGenerateRequest,
     ChartRollbackRequest,
@@ -188,14 +189,18 @@ class ChartOperationsService:
         await self.db.flush()
         return result
 
-    async def dry_run_deploy(self, chart_id: int) -> DryRunDeployResult:
+    async def dry_run_deploy(self, chart_id: int, body: ChartDryRunRequest) -> DryRunDeployResult:
         chart = await self.get_owned_chart(chart_id)
-        result = dry_run_deploy_chart(chart)
+        result = dry_run_deploy_chart(
+            chart,
+            namespace=body.namespace,
+            release_name=body.release_name,
+        )
         chart.dry_run_status = "passed" if result.success else "failed"
         chart.dry_run_summary = result.summary
         chart.dry_run_output = result.output
-        chart.dry_run_release_name = f"{chart.name or 'chart'}-release"
-        chart.dry_run_namespace = "helmgen-preview"
+        chart.dry_run_release_name = body.release_name or f"{chart.name or 'chart'}-release"
+        chart.dry_run_namespace = body.namespace
         chart.dry_run_at = _utcnow()
         if result.success:
             chart.lifecycle_status = "dry_run_ready"

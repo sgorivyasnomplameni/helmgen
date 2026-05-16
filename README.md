@@ -61,6 +61,20 @@ make dev
 
 Для большинства случаев этого режима достаточно.
 
+Опционально можно управлять Kubernetes-частью:
+
+```bash
+MINIKUBE_MODE=off make dev
+```
+
+Запускает проект без попытки автоматически поднимать `minikube`.
+
+```bash
+MINIKUBE_MODE=required make dev
+```
+
+Требует рабочий `minikube` и завершится с ошибкой, если Kubernetes не готов.
+
 ## Режимы запуска
 
 ### Основной режим
@@ -118,7 +132,9 @@ make backend-dev-local
 Что делает эта команда:
 - проверяет зависимости backend;
 - выполняет `alembic upgrade head`;
-- запускает `uvicorn` локально на `http://localhost:8000`.
+- запускает `uvicorn` локально на `http://localhost:8000`;
+- не поднимает frontend;
+- не пытается запускать `minikube`.
 
 ## Что делать после запуска
 

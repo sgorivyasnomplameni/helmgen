@@ -1,7 +1,7 @@
 .PHONY: dev dev-deploy-local backend-check backend-test backend-dev-local frontend-check deploy-ready minikube-up backend-restart deploy-ready-local stop-local-mode status-local-mode
 
 dev:
-	bash scripts/run-backend-local-deploy.sh
+	bash scripts/dev.sh
 
 dev-deploy-local:
 	$(MAKE) dev
@@ -14,7 +14,7 @@ backend-test:
 	backend/.venv/bin/pytest backend/tests/test_renderer.py backend/tests/test_recommender.py
 
 backend-dev-local:
-	bash scripts/run-backend-local.sh
+	FRONTEND_MODE=off MINIKUBE_MODE=off bash scripts/dev.sh
 
 frontend-check:
 	cd frontend && npm run type-check && npm run build

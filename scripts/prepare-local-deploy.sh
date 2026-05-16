@@ -14,7 +14,7 @@ docker compose up -d --build backend
 echo
 echo "Local deploy environment is ready."
 echo "Preferred local mode:"
-echo "  make deploy-ready-local"
+echo "  make dev"
 echo
 echo "This keeps db/frontend in Docker and runs backend on the host,"
 echo "which is usually the simplest way to reach minikube from HelmGen."

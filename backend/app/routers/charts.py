@@ -15,6 +15,7 @@ from app.schemas.chart import (
     ChartCreate,
     ChartDeployRequest,
     ChartDeployResponse,
+    ChartDryRunRequest,
     ChartDryRunResponse,
     ChartGenerateRequest,
     ChartMonitoringResponse,
@@ -138,11 +139,12 @@ async def template_chart(
 @router.post("/{chart_id}/deploy/dry-run", response_model=ChartDryRunResponse)
 async def dry_run_deploy(
     chart_id: int,
+    body: ChartDryRunRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     service = ChartOperationsService(db, current_user)
-    return await service.dry_run_deploy(chart_id)
+    return await service.dry_run_deploy(chart_id, body)
 
 
 @router.post("/{chart_id}/deploy", response_model=ChartDeployResponse)

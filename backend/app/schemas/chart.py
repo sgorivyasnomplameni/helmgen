@@ -82,6 +82,11 @@ class ChartDryRunResponse(BaseModel):
     summary: str = ""
 
 
+class ChartDryRunRequest(BaseModel):
+    namespace: str = "helmgen-preview"
+    release_name: str | None = None
+
+
 class ChartDeployRequest(BaseModel):
     namespace: str = "helmgen-demo"
     release_name: str | None = None
