@@ -283,6 +283,11 @@ make backend-test
 Запуск backend-тестов.
 
 ```bash
+make backend-check
+```
+Полная backend-проверка: компиляция Python-файлов без записи в проектный `__pycache__` и прогон всех backend-тестов.
+
+```bash
 make frontend-check
 ```
 Проверка фронта (`type-check` + `build`).

@@ -1,4 +1,8 @@
-.PHONY: backend-test frontend-check deploy-ready minikube-up backend-restart deploy-ready-local stop-local-mode status-local-mode
+.PHONY: backend-check backend-test frontend-check deploy-ready minikube-up backend-restart deploy-ready-local stop-local-mode status-local-mode
+
+backend-check:
+	PYTHONPYCACHEPREFIX=/tmp/helmgen-pycache backend/.venv/bin/python -m compileall -q backend/app backend/alembic backend/tests
+	backend/.venv/bin/pytest backend/tests
 
 backend-test:
 	backend/.venv/bin/pytest backend/tests/test_renderer.py backend/tests/test_recommender.py

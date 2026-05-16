@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 import io
 from typing import Annotated
 
@@ -31,57 +30,14 @@ from app.schemas.chart import (
     ChartValidationResponse,
     ClusterStatusResponse,
 )
-from app.services.chart_renderer import (
-    deploy_chart,
-    dry_run_deploy_chart,
-    get_cluster_status,
-    monitor_release_chart,
-    release_history_chart,
-    release_status_chart,
-    render_chart_template,
-    rollback_chart,
-    uninstall_chart,
-)
-from app.services.audit import log_audit_event
-from app.services.chart_validator import validate_chart
-from app.services.helm_generator import build_chart_archive, generate_chart
+from app.services.chart_operations import ChartOperationsService
+from app.services.chart_renderer import get_cluster_status
+from app.services.helm_generator import build_chart_archive
 from app.services.recommender import ChartParams, RecommendationSystem
 from app.services.security import get_current_user
 
 router = APIRouter()
 _recommender = RecommendationSystem()
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _reset_runtime_states(chart: Chart) -> None:
-    chart.validation_status = None
-    chart.validation_summary = None
-    chart.validated_at = None
-    chart.template_status = None
-    chart.template_summary = None
-    chart.templated_at = None
-    chart.dry_run_status = None
-    chart.dry_run_summary = None
-    chart.dry_run_output = None
-    chart.dry_run_release_name = None
-    chart.dry_run_namespace = None
-    chart.dry_run_at = None
-    chart.deploy_status = None
-    chart.deploy_summary = None
-    chart.deploy_output = None
-    chart.deployed_release_name = None
-    chart.deployed_namespace = None
-    chart.deployed_at = None
-
-
-async def _get_owned_chart(db: AsyncSession, chart_id: int, current_user: User) -> Chart:
-    chart = await db.get(Chart, chart_id)
-    if not chart or chart.owner_id not in {None, current_user.id}:
-        raise HTTPException(status_code=404, detail="Chart not found")
-    return chart
 
 
 @router.get("/recommendations", response_model=list[str])
@@ -113,19 +69,8 @@ async def create_chart(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = Chart(**data.model_dump(), lifecycle_status="draft", owner_id=current_user.id)
-    db.add(chart)
-    await db.flush()
-    await db.refresh(chart)
-    log_audit_event(
-        db,
-        action="chart.create",
-        status="success",
-        summary=f"Создан chart {chart.name}.",
-        user=current_user,
-        chart=chart,
-    )
-    return chart
+    service = ChartOperationsService(db, current_user)
+    return await service.create_chart(data)
 
 
 @router.get("/{chart_id}", response_model=ChartResponse)
@@ -134,7 +79,8 @@ async def get_chart(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await _get_owned_chart(db, chart_id, current_user)
+    service = ChartOperationsService(db, current_user)
+    return await service.get_owned_chart(chart_id)
 
 
 @router.patch("/{chart_id}", response_model=ChartResponse)
@@ -144,20 +90,8 @@ async def update_chart(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    for field, value in data.model_dump(exclude_none=True).items():
-        setattr(chart, field, value)
-    log_audit_event(
-        db,
-        action="chart.update",
-        status="success",
-        summary=f"Обновлён chart {chart.name}.",
-        user=current_user,
-        chart=chart,
-    )
-    await db.flush()
-    await db.refresh(chart)
-    return chart
+    service = ChartOperationsService(db, current_user)
+    return await service.update_chart(chart_id, data)
 
 
 @router.delete("/{chart_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -166,16 +100,8 @@ async def delete_chart(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    log_audit_event(
-        db,
-        action="chart.delete",
-        status="success",
-        summary=f"Удалён chart {chart.name}.",
-        user=current_user,
-        chart=chart,
-    )
-    await db.delete(chart)
+    service = ChartOperationsService(db, current_user)
+    await service.delete_chart(chart_id)
 
 
 @router.post("/{chart_id}/generate", response_model=ChartResponse)
@@ -185,23 +111,8 @@ async def generate(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    if body.values_yaml:
-        chart.values_yaml = body.values_yaml
-    chart.generated_yaml = generate_chart(chart)
-    chart.lifecycle_status = "generated"
-    _reset_runtime_states(chart)
-    log_audit_event(
-        db,
-        action="chart.generate",
-        status="success",
-        summary=f"Собран chart {chart.name}.",
-        user=current_user,
-        chart=chart,
-    )
-    await db.flush()
-    await db.refresh(chart)
-    return chart
+    service = ChartOperationsService(db, current_user)
+    return await service.generate_chart(chart_id, body)
 
 
 @router.post("/{chart_id}/validate", response_model=ChartValidationResponse)
@@ -210,24 +121,8 @@ async def validate(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    result = validate_chart(chart)
-    chart.validation_status = "passed" if result.valid else "failed"
-    chart.validation_summary = result.summary
-    chart.validated_at = _utcnow()
-    if result.valid:
-        chart.lifecycle_status = "validated"
-    log_audit_event(
-        db,
-        action="chart.validate",
-        status="success" if result.valid else "error",
-        summary=result.summary,
-        user=current_user,
-        chart=chart,
-        details="\n".join(result.errors or result.warnings or result.checks[:10]) or None,
-    )
-    await db.flush()
-    return result
+    service = ChartOperationsService(db, current_user)
+    return await service.validate_chart(chart_id)
 
 
 @router.post("/{chart_id}/template", response_model=ChartTemplateResponse)
@@ -236,24 +131,8 @@ async def template_chart(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    result = render_chart_template(chart)
-    chart.template_status = "passed" if result.success else "failed"
-    chart.template_summary = result.summary
-    chart.templated_at = _utcnow()
-    if result.success:
-        chart.lifecycle_status = "templated"
-    log_audit_event(
-        db,
-        action="chart.template",
-        status="success" if result.success else "error",
-        summary=result.summary,
-        user=current_user,
-        chart=chart,
-        details="\n".join(result.errors or result.warnings) or None,
-    )
-    await db.flush()
-    return result
+    service = ChartOperationsService(db, current_user)
+    return await service.render_chart_template(chart_id)
 
 
 @router.post("/{chart_id}/deploy/dry-run", response_model=ChartDryRunResponse)
@@ -262,27 +141,8 @@ async def dry_run_deploy(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    result = dry_run_deploy_chart(chart)
-    chart.dry_run_status = "passed" if result.success else "failed"
-    chart.dry_run_summary = result.summary
-    chart.dry_run_output = result.output
-    chart.dry_run_release_name = f"{chart.name or 'chart'}-release"
-    chart.dry_run_namespace = "helmgen-preview"
-    chart.dry_run_at = _utcnow()
-    if result.success:
-        chart.lifecycle_status = "dry_run_ready"
-    log_audit_event(
-        db,
-        action="chart.dry_run",
-        status="success" if result.success else "error",
-        summary=result.summary,
-        user=current_user,
-        chart=chart,
-        details=result.output[:4000] if result.output else ("\n".join(result.errors) or None),
-    )
-    await db.flush()
-    return result
+    service = ChartOperationsService(db, current_user)
+    return await service.dry_run_deploy(chart_id)
 
 
 @router.post("/{chart_id}/deploy", response_model=ChartDeployResponse)
@@ -292,27 +152,8 @@ async def deploy(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    result = deploy_chart(chart, namespace=body.namespace, release_name=body.release_name)
-    chart.deploy_status = "passed" if result.success else "failed"
-    chart.deploy_summary = result.summary
-    chart.deploy_output = result.output
-    chart.deployed_release_name = result.release_name
-    chart.deployed_namespace = result.namespace
-    chart.deployed_at = _utcnow()
-    if result.success:
-        chart.lifecycle_status = "deployed"
-    log_audit_event(
-        db,
-        action="chart.deploy",
-        status="success" if result.success else "error",
-        summary=result.summary,
-        user=current_user,
-        chart=chart,
-        details=result.output[:4000] if result.output else ("\n".join(result.errors) or None),
-    )
-    await db.flush()
-    return result
+    service = ChartOperationsService(db, current_user)
+    return await service.deploy_chart(chart_id, body)
 
 
 @router.get("/{chart_id}/deploy/status", response_model=ChartReleaseStatusResponse)
@@ -323,23 +164,12 @@ async def release_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    result = release_status_chart(
-        chart,
-        namespace=namespace or chart.deployed_namespace or "helmgen-demo",
-        release_name=release_name or chart.deployed_release_name or chart.name,
+    service = ChartOperationsService(db, current_user)
+    return await service.release_status(
+        chart_id,
+        namespace=namespace,
+        release_name=release_name,
     )
-    log_audit_event(
-        db,
-        action="chart.release_status",
-        status="success" if result.success else "error",
-        summary=result.summary,
-        user=current_user,
-        chart=chart,
-        details=result.output[:4000] if result.output else ("\n".join(result.errors) or None),
-    )
-    await db.flush()
-    return result
 
 
 @router.get("/{chart_id}/deploy/monitoring", response_model=ChartMonitoringResponse)
@@ -350,23 +180,12 @@ async def monitoring(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    result = monitor_release_chart(
-        chart,
-        namespace=namespace or chart.deployed_namespace or "helmgen-demo",
-        release_name=release_name or chart.deployed_release_name or chart.name,
+    service = ChartOperationsService(db, current_user)
+    return await service.monitoring(
+        chart_id,
+        namespace=namespace,
+        release_name=release_name,
     )
-    log_audit_event(
-        db,
-        action="chart.monitoring",
-        status="success" if result.success else "error",
-        summary=result.summary,
-        user=current_user,
-        chart=chart,
-        details=result.output[:4000] if result.output else ("\n".join(result.errors) or None),
-    )
-    await db.flush()
-    return result
 
 
 @router.get("/{chart_id}/deploy/history", response_model=ChartReleaseHistoryResponse)
@@ -377,23 +196,12 @@ async def release_history(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    result = release_history_chart(
-        chart,
-        namespace=namespace or chart.deployed_namespace or "helmgen-demo",
-        release_name=release_name or chart.deployed_release_name or chart.name,
+    service = ChartOperationsService(db, current_user)
+    return await service.release_history(
+        chart_id,
+        namespace=namespace,
+        release_name=release_name,
     )
-    log_audit_event(
-        db,
-        action="chart.release_history",
-        status="success" if result.success else "error",
-        summary=result.summary,
-        user=current_user,
-        chart=chart,
-        details=result.output[:4000] if result.output else ("\n".join(result.errors) or None),
-    )
-    await db.flush()
-    return result
 
 
 @router.post("/{chart_id}/deploy/rollback", response_model=ChartRollbackResponse)
@@ -403,27 +211,8 @@ async def rollback(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    result = rollback_chart(chart, namespace=body.namespace, release_name=body.release_name, revision=body.revision)
-    chart.deploy_status = "passed" if result.success else "rollback_failed"
-    chart.deploy_summary = result.summary
-    chart.deploy_output = result.output
-    chart.deployed_release_name = result.release_name
-    chart.deployed_namespace = result.namespace
-    if result.success:
-        chart.deployed_at = _utcnow()
-        chart.lifecycle_status = "deployed"
-    log_audit_event(
-        db,
-        action="chart.rollback",
-        status="success" if result.success else "error",
-        summary=result.summary,
-        user=current_user,
-        chart=chart,
-        details=result.output[:4000] if result.output else ("\n".join(result.errors) or None),
-    )
-    await db.flush()
-    return result
+    service = ChartOperationsService(db, current_user)
+    return await service.rollback_chart(chart_id, body)
 
 
 @router.post("/{chart_id}/deploy/uninstall", response_model=ChartUninstallResponse)
@@ -433,26 +222,8 @@ async def uninstall(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
-    result = uninstall_chart(chart, namespace=body.namespace, release_name=body.release_name)
-    chart.deploy_status = "removed" if result.success else "remove_failed"
-    chart.deploy_summary = result.summary
-    chart.deploy_output = result.output
-    chart.deployed_release_name = result.release_name
-    chart.deployed_namespace = result.namespace
-    if result.success:
-        chart.lifecycle_status = "undeployed"
-    log_audit_event(
-        db,
-        action="chart.uninstall",
-        status="success" if result.success else "error",
-        summary=result.summary,
-        user=current_user,
-        chart=chart,
-        details=result.output[:4000] if result.output else ("\n".join(result.errors) or None),
-    )
-    await db.flush()
-    return result
+    service = ChartOperationsService(db, current_user)
+    return await service.uninstall_chart(chart_id, body)
 
 
 @router.get("/{chart_id}/audit", response_model=list[AuditEventResponse])
@@ -461,7 +232,8 @@ async def chart_audit_events(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
+    service = ChartOperationsService(db, current_user)
+    chart = await service.get_owned_chart(chart_id)
     result = await db.execute(
         select(AuditEvent)
         .where(AuditEvent.chart_id == chart.id)
@@ -477,7 +249,8 @@ async def download_chart(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    chart = await _get_owned_chart(db, chart_id, current_user)
+    service = ChartOperationsService(db, current_user)
+    chart = await service.get_owned_chart(chart_id)
     if not chart.generated_yaml:
         raise HTTPException(status_code=400, detail="Chart not generated yet")
 
