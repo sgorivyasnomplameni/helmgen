@@ -61,6 +61,13 @@ const actionButton: React.CSSProperties = {
   cursor: 'pointer',
 }
 
+const subtleButton: React.CSSProperties = {
+  ...actionButton,
+  border: '1px solid var(--border)',
+  background: 'var(--panel-strong)',
+  color: 'var(--text-soft)',
+}
+
 function Spinner({ label = 'Загрузка' }: { label?: string }) {
   return (
     <div
@@ -343,7 +350,74 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
   const isUninstalling = activeOperation === 'uninstall'
   const canDryRun = !isDryRunning
   const canDeploy = clusterReady && deployConfirmed && !isDeploying
-  const canRollback = clusterReady && rollbackConfirmed && !isRollingBack
+  const templateReady = Boolean(templateResult?.success)
+  const dryRunReady = Boolean(dryRunResult?.success)
+  const deploySucceeded = Boolean(deployResult?.success)
+  const showDeployConfirmation = !deploySucceeded && (dryRunReady || tab === 'deploy')
+  const showRollbackControls = tab === 'rollback'
+
+  const primaryFlowAction =
+    !templateReady
+      ? {
+          title: 'Шаг 1. Подготовить манифесты',
+          description: 'Сначала собери итоговые Kubernetes-манифесты через helm template и проверь, что chart рендерится без ошибок.',
+          label: isTemplating ? 'Рендер...' : 'Запустить рендер',
+          onClick: () => void handleTemplate(),
+          disabled: isTemplating,
+          tone: 'accent' as const,
+        }
+      : !dryRunReady
+        ? {
+            title: 'Шаг 2. Выполнить dry-run',
+            description: 'Дальше проверь release с текущими namespace и release name без реального применения изменений.',
+            label: isDryRunning ? 'Dry-run...' : 'Запустить dry-run',
+            onClick: () => void handleDryRunDeploy(),
+            disabled: !canDryRun,
+            tone: 'neutral' as const,
+          }
+        : !deploySucceeded
+          ? clusterReady
+            ? {
+                title: 'Шаг 3. Выполнить deploy',
+                description: 'Кластер доступен. Подтверди реальное развёртывание и запускай helm upgrade --install.',
+                label: isDeploying ? 'Развёртывание...' : 'Развернуть release',
+                onClick: () => void handleDeploy(),
+                disabled: !canDeploy,
+                tone: 'success' as const,
+              }
+            : {
+                title: 'Шаг 3. Подготовить Kubernetes',
+                description: 'Chart уже прошёл render и dry-run, но backend пока не видит рабочий Kubernetes context для реального deploy.',
+                label: isLoadingClusterStatus ? 'Проверяем...' : 'Проверить Kubernetes',
+                onClick: () => void refreshClusterStatus(),
+                disabled: isLoadingClusterStatus,
+                tone: 'warning' as const,
+              }
+          : {
+              title: 'Deploy завершён',
+              description: 'Release уже развернут. Теперь можно посмотреть статус, мониторинг, историю Helm или выполнить откат.',
+              label: isMonitoring ? 'Собираем...' : 'Открыть мониторинг',
+              onClick: () => void handleMonitoring(),
+              disabled: isMonitoring || !clusterReady,
+              tone: 'success' as const,
+            }
+
+  const primaryActionStyle =
+    primaryFlowAction.tone === 'accent'
+      ? { border: 'none', background: 'var(--accent)', color: 'white' }
+      : primaryFlowAction.tone === 'success'
+        ? { border: 'none', background: 'var(--success)', color: 'white' }
+        : primaryFlowAction.tone === 'warning'
+          ? {
+              border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)',
+              background: 'var(--warning-soft)',
+              color: 'var(--warning)',
+            }
+          : {
+              border: '1px solid var(--border)',
+              background: 'var(--panel-strong)',
+              color: 'var(--text-soft)',
+            }
 
   function startOperation(key: OperationKey, label: string) {
     setCurrentOperation({ key, label, startedAt: Date.now() })
@@ -725,154 +799,107 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
       <div
         style={{
           ...card,
-          padding: '1rem 1.15rem',
+          padding: '1.15rem 1.2rem',
           marginBottom: '1.25rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '1rem',
-          flexWrap: 'wrap',
           background: 'linear-gradient(180deg, var(--panel) 0%, var(--panel-muted) 100%)',
         }}
       >
-        <div>
-          <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Текущий chart
-          </div>
-          <div style={{ marginTop: '0.28rem', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>
-            {chart?.name ?? 'Не выбран'}
-          </div>
-          {chart && (
-            <div style={{ marginTop: '0.28rem', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
-              Chart {chart.chart_version} · App {chart.app_version}
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Текущий chart
+              </div>
+              <div style={{ marginTop: '0.28rem', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>
+                {chart?.name ?? 'Не выбран'}
+              </div>
+              {chart && (
+                <div style={{ marginTop: '0.28rem', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+                  Chart {chart.chart_version} · App {chart.app_version}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => void handleDeploy()}
-            disabled={!canDeploy}
+            <div
+              style={{
+                padding: '0.45rem 0.75rem',
+                borderRadius: '999px',
+                background: deploySucceeded
+                  ? 'var(--success-soft)'
+                  : dryRunReady
+                    ? 'var(--accent-soft)'
+                    : templateReady
+                      ? 'var(--panel-contrast)'
+                      : 'var(--panel-strong)',
+                color: deploySucceeded
+                  ? 'var(--success)'
+                  : dryRunReady
+                    ? 'var(--accent)'
+                    : 'var(--text-soft)',
+                fontSize: '0.76rem',
+                fontWeight: 800,
+              }}
+            >
+              {deploySucceeded
+                ? 'Готово к post-deploy действиям'
+                : dryRunReady
+                  ? 'Готово к deploy'
+                  : templateReady
+                    ? 'Готово к dry-run'
+                    : 'Начни с рендера'}
+            </div>
+          </div>
+
+          <div
             style={{
-              ...actionButton,
-              border: 'none',
-              background: canDeploy ? 'var(--success)' : 'var(--panel-strong)',
-              color: canDeploy ? 'white' : 'var(--text-muted)',
-              cursor: canDeploy ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {isDeploying ? 'Развёртывание...' : 'Выполнить развёртывание'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleUninstall()}
-            disabled={isUninstalling || !clusterReady}
-            style={{
-              ...actionButton,
-              border: '1px solid color-mix(in srgb, var(--danger) 35%, transparent)',
-              background: isUninstalling || !clusterReady ? 'var(--panel-strong)' : 'var(--danger-soft)',
-              color: isUninstalling || !clusterReady ? 'var(--text-muted)' : 'var(--danger)',
-              cursor: isUninstalling || !clusterReady ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isUninstalling ? 'Удаление...' : 'Удалить release'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleReleaseStatus()}
-            disabled={isCheckingReleaseStatus || !clusterReady}
-            style={{
-              ...actionButton,
+              padding: '1rem',
+              borderRadius: '0.95rem',
               border: '1px solid var(--border)',
               background: 'var(--panel-strong)',
-              color: isCheckingReleaseStatus || !clusterReady ? 'var(--text-muted)' : 'var(--text-soft)',
-              cursor: isCheckingReleaseStatus || !clusterReady ? 'not-allowed' : 'pointer',
+              display: 'grid',
+              gap: '0.75rem',
             }}
           >
-            {isCheckingReleaseStatus ? 'Проверяем...' : 'Статус release'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleMonitoring()}
-            disabled={isMonitoring || !clusterReady}
-            style={{
-              ...actionButton,
-              border: '1px solid var(--border)',
-              background: 'var(--panel-strong)',
-              color: isMonitoring || !clusterReady ? 'var(--text-muted)' : 'var(--text-soft)',
-              cursor: isMonitoring || !clusterReady ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isMonitoring ? 'Сбор...' : 'Мониторинг'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleReleaseHistory()}
-            disabled={isLoadingReleaseHistory || !clusterReady}
-            style={{
-              ...actionButton,
-              border: '1px solid var(--border)',
-              background: 'var(--panel-strong)',
-              color: isLoadingReleaseHistory || !clusterReady ? 'var(--text-muted)' : 'var(--text-soft)',
-              cursor: isLoadingReleaseHistory || !clusterReady ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isLoadingReleaseHistory ? 'История...' : 'История Helm'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleRollback()}
-            disabled={!canRollback}
-            style={{
-              ...actionButton,
-              border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)',
-              background: canRollback ? 'var(--warning-soft)' : 'var(--panel-strong)',
-              color: canRollback ? 'var(--warning)' : 'var(--text-muted)',
-              cursor: canRollback ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {isRollingBack ? 'Откат...' : 'Откат release'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleTemplate()}
-            disabled={isTemplating}
-            style={{
-              ...actionButton,
-              border: 'none',
-              background: 'var(--accent)',
-              color: 'white',
-            }}
-          >
-            {isTemplating ? 'Рендер...' : 'Рендер'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleDryRunDeploy()}
-            disabled={!canDryRun}
-            style={{
-              ...actionButton,
-              border: '1px solid var(--border)',
-              background: 'var(--panel-strong)',
-              color: !canDryRun ? 'var(--text-muted)' : 'var(--text-soft)',
-              cursor: !canDryRun ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isDryRunning ? 'Dry-run...' : 'Dry-run'}
-          </button>
-          <button
-            type="button"
-            onClick={handleDownload}
-            style={{
-              ...actionButton,
-              border: '1px solid color-mix(in srgb, var(--success) 35%, transparent)',
-              background: 'var(--success-soft)',
-              color: 'var(--success)',
-            }}
-          >
-            Скачать .tgz
-          </button>
+            <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
+              {primaryFlowAction.title}
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.6 }}>
+              {primaryFlowAction.description}
+            </div>
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={primaryFlowAction.onClick}
+                disabled={primaryFlowAction.disabled}
+                style={{
+                  ...actionButton,
+                  ...primaryActionStyle,
+                  opacity: primaryFlowAction.disabled ? 0.65 : 1,
+                  cursor: primaryFlowAction.disabled ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {primaryFlowAction.label}
+              </button>
+              <button
+                type="button"
+                onClick={handleDownload}
+                style={{
+                  ...subtleButton,
+                }}
+              >
+                Скачать .tgz
+              </button>
+              {onOpenGenerator && (
+                <button
+                  type="button"
+                  onClick={onOpenGenerator}
+                  style={subtleButton}
+                >
+                  Вернуться в генератор
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -958,8 +985,11 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
           </div>
 
           <div style={{ ...card, padding: '1.15rem' }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: '0.8rem' }}>
-              Параметры развёртывания
+            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: '0.35rem' }}>
+              Параметры текущего шага
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.83rem', lineHeight: 1.55, marginBottom: '0.8rem' }}>
+              Эти параметры используются для dry-run, deploy и release-операций. Меняй их только перед следующим шагом, а не на каждом действии подряд.
             </div>
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               <label style={{ display: 'grid', gap: '0.35rem' }}>
@@ -1000,144 +1030,236 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                   }}
                 />
               </label>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '0.65rem',
-                  padding: '0.8rem',
-                  borderRadius: '0.75rem',
-                  border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)',
-                  background: 'var(--warning-soft)',
-                  color: 'var(--warning)',
-                  fontSize: '0.82rem',
-                  fontWeight: 800,
-                  lineHeight: 1.45,
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={deployConfirmed}
-                  onChange={e => setDeployConfirmed(e.target.checked)}
-                  style={{ width: '1rem', height: '1rem', marginTop: '0.12rem', flex: '0 0 auto' }}
-                />
-                <span>
-                  Подтверждаю реальное развёртывание в выбранный Kubernetes namespace
-                </span>
-              </label>
-              <label style={{ display: 'grid', gap: '0.35rem' }}>
-                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Ревизия для rollback
-                </span>
-                <input
-                  value={rollbackRevision}
-                  onChange={e => setRollbackRevision(e.target.value.replace(/[^\d]/g, ''))}
-                  placeholder="Пусто = предыдущая"
-                  inputMode="numeric"
+
+              {showDeployConfirmation && (
+                <label
                   style={{
-                    width: '100%',
-                    padding: '0.65rem 0.75rem',
-                    borderRadius: '0.65rem',
-                    border: '1px solid var(--border)',
-                    background: 'var(--panel-strong)',
-                    color: 'var(--text)',
-                    fontSize: '0.9rem',
-                    boxSizing: 'border-box',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '0.65rem',
+                    padding: '0.8rem',
+                    borderRadius: '0.75rem',
+                    border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)',
+                    background: 'var(--warning-soft)',
+                    color: 'var(--warning)',
+                    fontSize: '0.82rem',
+                    fontWeight: 800,
+                    lineHeight: 1.45,
+                    cursor: 'pointer',
                   }}
-                />
-              </label>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '0.65rem',
-                  padding: '0.8rem',
-                  borderRadius: '0.75rem',
-                  border: '1px solid color-mix(in srgb, var(--danger) 35%, transparent)',
-                  background: 'var(--danger-soft)',
-                  color: 'var(--danger)',
-                  fontSize: '0.82rem',
-                  fontWeight: 800,
-                  lineHeight: 1.45,
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={rollbackConfirmed}
-                  onChange={e => setRollbackConfirmed(e.target.checked)}
-                  style={{ width: '1rem', height: '1rem', marginTop: '0.12rem', flex: '0 0 auto' }}
-                />
-                <span>
-                  Подтверждаю откат release в выбранном Kubernetes namespace
+                >
+                  <input
+                    type="checkbox"
+                    checked={deployConfirmed}
+                    onChange={e => setDeployConfirmed(e.target.checked)}
+                    style={{ width: '1rem', height: '1rem', marginTop: '0.12rem', flex: '0 0 auto' }}
+                  />
+                  <span>
+                    Подтверждаю реальное развёртывание в выбранный Kubernetes namespace
+                  </span>
+                </label>
+              )}
+
+              {showRollbackControls && (
+                <>
+                  <label style={{ display: 'grid', gap: '0.35rem' }}>
+                    <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Ревизия для rollback
+                    </span>
+                    <input
+                      value={rollbackRevision}
+                      onChange={e => setRollbackRevision(e.target.value.replace(/[^\d]/g, ''))}
+                      placeholder="Пусто = предыдущая"
+                      inputMode="numeric"
+                      style={{
+                        width: '100%',
+                        padding: '0.65rem 0.75rem',
+                        borderRadius: '0.65rem',
+                        border: '1px solid var(--border)',
+                        background: 'var(--panel-strong)',
+                        color: 'var(--text)',
+                        fontSize: '0.9rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </label>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '0.65rem',
+                      padding: '0.8rem',
+                      borderRadius: '0.75rem',
+                      border: '1px solid color-mix(in srgb, var(--danger) 35%, transparent)',
+                      background: 'var(--danger-soft)',
+                      color: 'var(--danger)',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      lineHeight: 1.45,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={rollbackConfirmed}
+                      onChange={e => setRollbackConfirmed(e.target.checked)}
+                      style={{ width: '1rem', height: '1rem', marginTop: '0.12rem', flex: '0 0 auto' }}
+                    />
+                    <span>
+                      Подтверждаю откат release в выбранном Kubernetes namespace
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void handleRollback()}
+                    disabled={!clusterReady || !rollbackConfirmed || isRollingBack}
+                    style={{
+                      ...actionButton,
+                      border: 'none',
+                      background: 'var(--warning)',
+                      color: '#1f2937',
+                      opacity: !clusterReady || !rollbackConfirmed || isRollingBack ? 0.65 : 1,
+                      cursor: !clusterReady || !rollbackConfirmed || isRollingBack ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {isRollingBack ? 'Выполняем rollback...' : 'Запустить rollback'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div style={{ ...card, padding: '1.15rem' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: '0.8rem' }}>
+              Прогресс сценария
+            </div>
+            <div style={{ display: 'grid', gap: '0.65rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-soft)', fontSize: '0.84rem', fontWeight: 700 }}>1. Рендер манифестов</span>
+                <span style={{ color: isTemplating ? 'var(--accent)' : templateResult?.success ? 'var(--success)' : 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 800 }}>
+                  {isTemplating ? 'идёт' : templateResult?.success ? 'готово' : 'ожидает'}
                 </span>
-              </label>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-soft)', fontSize: '0.84rem', fontWeight: 700 }}>2. Dry-run release</span>
+                <span style={{ color: isDryRunning ? 'var(--accent)' : dryRunResult?.success ? 'var(--success)' : dryRunResult ? 'var(--warning)' : 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 800 }}>
+                  {isDryRunning ? 'идёт' : dryRunResult?.success ? 'готово' : dryRunResult ? 'ошибка' : 'ожидает'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-soft)', fontSize: '0.84rem', fontWeight: 700 }}>3. Реальный deploy</span>
+                <span style={{ color: isDeploying ? 'var(--accent)' : deployResult?.success ? 'var(--success)' : deployResult ? 'var(--warning)' : 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 800 }}>
+                  {isDeploying ? 'идёт' : deployResult?.success ? 'готово' : deployResult ? 'ошибка' : 'ожидает'}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <div style={{ ...card, padding: '1.15rem' }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)' }}>
-              Статус
-            </div>
-            <div style={{ marginTop: '0.8rem', display: 'grid', gap: '0.55rem' }}>
-              <div style={{ color: isTemplating ? 'var(--accent)' : templateResult?.success ? 'var(--success)' : 'var(--text-muted)', fontWeight: 700 }}>
-                Рендер: {isTemplating ? 'выполняется' : templateResult?.success ? 'готов' : 'ожидает'}
-              </div>
-              <div style={{ color: isDryRunning ? 'var(--accent)' : dryRunResult?.success ? 'var(--success)' : dryRunResult ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 700 }}>
-                Dry-run: {isDryRunning ? 'выполняется' : dryRunResult?.success ? 'успешен' : dryRunResult ? 'требует внимания' : 'не запускался'}
-              </div>
-              <div style={{ color: isDeploying ? 'var(--accent)' : deployResult?.success ? 'var(--success)' : deployResult ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 700 }}>
-                Развёртывание: {isDeploying ? 'выполняется' : deployResult?.success ? 'выполнено' : deployResult ? 'требует внимания' : 'не запускалось'}
-              </div>
-              <div style={{ color: isMonitoring ? 'var(--accent)' : monitoringResult?.success ? 'var(--success)' : monitoringResult ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 700 }}>
-                Мониторинг: {isMonitoring ? 'выполняется' : monitoringResult?.success ? 'получен' : monitoringResult ? 'требует внимания' : 'не запускался'}
-              </div>
-              <div style={{ color: isRollingBack ? 'var(--accent)' : rollbackResult?.success ? 'var(--success)' : rollbackResult ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 700 }}>
-                Rollback: {isRollingBack ? 'выполняется' : rollbackResult?.success ? 'выполнен' : rollbackResult ? 'требует внимания' : 'не запускался'}
-              </div>
-              <div style={{ color: isUninstalling ? 'var(--accent)' : uninstallResult?.success ? 'var(--success)' : uninstallResult ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 700 }}>
-                Удаление release: {isUninstalling ? 'выполняется' : uninstallResult?.success ? 'выполнено' : uninstallResult ? 'требует внимания' : 'не запускалось'}
-              </div>
-              {chartError && (
-                <div style={{ color: 'var(--danger)', fontWeight: 700 }}>
-                  {chartError}
-                </div>
-              )}
-              {loadingChart && (
-                <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>
-                  Загружаем данные chart...
-                </div>
-              )}
-              {clusterBlockingReason && (
-                <div style={{ color: 'var(--warning)', fontWeight: 700, lineHeight: 1.5 }}>
-                  Реальный deploy-контур сейчас недоступен: backend не видит рабочий kube-context. Template и client-side dry-run можно использовать дальше.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={{ ...card, padding: '1.15rem' }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)' }}>
-              Последняя операция
-            </div>
-            {!lastOperation ? (
-              <div style={{ marginTop: '0.8rem', color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.6 }}>
-                Здесь появится итог последнего действия: рендер, dry-run, deploy или удаление release.
-              </div>
-            ) : (
-              <div style={{ marginTop: '0.8rem', display: 'grid', gap: '0.5rem' }}>
-                <div style={{ color: lastOperation.status === 'success' ? 'var(--success)' : 'var(--warning)', fontWeight: 800 }}>
-                  {lastOperation.label}: {lastOperation.status === 'success' ? 'успешно' : 'с ошибкой'}
-                </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                  {new Date(lastOperation.finishedAt).toLocaleTimeString('ru-RU')}
-                </div>
-                <div style={{ color: 'var(--text-soft)', fontSize: '0.84rem', lineHeight: 1.55 }}>
-                  {lastOperation.summary}
-                </div>
+            {(chartError || loadingChart || clusterBlockingReason) && (
+              <div style={{ marginTop: '0.95rem', display: 'grid', gap: '0.55rem' }}>
+                {chartError && (
+                  <div style={{ color: 'var(--danger)', fontWeight: 700, fontSize: '0.82rem', lineHeight: 1.5 }}>
+                    {chartError}
+                  </div>
+                )}
+                {loadingChart && (
+                  <div style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: '0.82rem' }}>
+                    Загружаем данные chart...
+                  </div>
+                )}
+                {clusterBlockingReason && (
+                  <div style={{ color: 'var(--warning)', fontWeight: 700, fontSize: '0.82rem', lineHeight: 1.5 }}>
+                    Реальный deploy-контур сейчас недоступен, но template и client-side dry-run можно использовать дальше.
+                  </div>
+                )}
               </div>
             )}
+
+            <div
+              style={{
+                marginTop: '0.95rem',
+                paddingTop: '0.9rem',
+                borderTop: '1px solid var(--border)',
+              }}
+            >
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Последняя операция
+              </div>
+              {!lastOperation ? (
+                <div style={{ marginTop: '0.55rem', color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                  После первого действия здесь появится краткий итог.
+                </div>
+              ) : (
+                <div style={{ marginTop: '0.55rem', display: 'grid', gap: '0.4rem' }}>
+                  <div style={{ color: lastOperation.status === 'success' ? 'var(--success)' : 'var(--warning)', fontWeight: 800, fontSize: '0.84rem' }}>
+                    {lastOperation.label}: {lastOperation.status === 'success' ? 'успешно' : 'с ошибкой'}
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    {new Date(lastOperation.finishedAt).toLocaleTimeString('ru-RU')}
+                  </div>
+                  <div style={{ color: 'var(--text-soft)', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                    {lastOperation.summary}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ ...card, padding: '1.15rem' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: '0.35rem' }}>
+              Дополнительные действия
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.83rem', lineHeight: 1.55, marginBottom: '0.8rem' }}>
+              Здесь только post-deploy и опасные операции. Для обычного сценария сверху достаточно render → dry-run → deploy.
+            </div>
+            <div style={{ display: 'grid', gap: '0.55rem' }}>
+              <button
+                type="button"
+                onClick={() => void handleReleaseStatus()}
+                disabled={!clusterReady || isCheckingReleaseStatus}
+                style={{ ...subtleButton, width: '100%', textAlign: 'left', opacity: !clusterReady || isCheckingReleaseStatus ? 0.65 : 1 }}
+              >
+                {isCheckingReleaseStatus ? 'Получаем статус release...' : 'Статус release'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleMonitoring()}
+                disabled={!clusterReady || isMonitoring}
+                style={{ ...subtleButton, width: '100%', textAlign: 'left', opacity: !clusterReady || isMonitoring ? 0.65 : 1 }}
+              >
+                {isMonitoring ? 'Собираем мониторинг...' : 'Мониторинг release'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleReleaseHistory()}
+                disabled={!clusterReady || isLoadingReleaseHistory}
+                style={{ ...subtleButton, width: '100%', textAlign: 'left', opacity: !clusterReady || isLoadingReleaseHistory ? 0.65 : 1 }}
+              >
+                {isLoadingReleaseHistory ? 'Получаем историю Helm...' : 'История Helm'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('rollback')}
+                style={{ ...subtleButton, width: '100%', textAlign: 'left' }}
+              >
+                Подготовить rollback
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleUninstall()}
+                disabled={!clusterReady || isUninstalling}
+                style={{
+                  ...subtleButton,
+                  width: '100%',
+                  textAlign: 'left',
+                  border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)',
+                  background: 'var(--danger-soft)',
+                  color: 'var(--danger)',
+                  opacity: !clusterReady || isUninstalling ? 0.65 : 1,
+                }}
+              >
+                {isUninstalling ? 'Удаляем release...' : 'Удалить release'}
+              </button>
+            </div>
           </div>
 
           <AuditList

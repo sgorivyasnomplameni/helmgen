@@ -44,7 +44,13 @@ cleanup() {
   echo "Development mode stopped."
 }
 
-trap 'cleanup' EXIT INT TERM
+handle_signal() {
+  cleanup
+  exit 0
+}
+
+trap 'cleanup' EXIT
+trap 'handle_signal' INT TERM
 
 fail() {
   echo "Error: $1" >&2
