@@ -10,6 +10,7 @@ class Chart(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     chart_version: Mapped[str] = mapped_column(String(50), default="0.1.0")

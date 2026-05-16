@@ -12,6 +12,7 @@ SHUTTING_DOWN=0
 LOCAL_DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://helmgen:helmgen@127.0.0.1:5432/helmgen}"
 LOCAL_KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 LOCAL_HELM_BIN="${HELM_BIN:-$BACKEND_DIR/.tools/bin/helm}"
+MINIKUBE_MODE="${MINIKUBE_MODE:-auto}"
 
 cleanup() {
   if [[ "$SHUTTING_DOWN" -eq 1 ]]; then
@@ -20,7 +21,7 @@ cleanup() {
 
   SHUTTING_DOWN=1
   echo
-  echo "Stopping local deploy mode..."
+  echo "Stopping development mode..."
 
   if [[ -n "$BACKEND_PID" ]]; then
     kill "$BACKEND_PID" >/dev/null 2>&1 || true
@@ -33,7 +34,7 @@ cleanup() {
   fi
 
   docker compose stop backend frontend db >/dev/null 2>&1 || true
-  echo "Local deploy mode stopped."
+  echo "Development mode stopped."
 }
 
 trap 'cleanup' EXIT INT TERM
@@ -41,31 +42,44 @@ trap 'cleanup' EXIT INT TERM
 echo "[1/6] Starting database in Docker..."
 docker compose up -d db
 
-echo "[2/6] Stopping frontend and backend containers to free ports 3000/8000..."
+echo "[2/6] Checking optional minikube integration..."
+if [[ "$MINIKUBE_MODE" != "off" ]] && command -v minikube >/dev/null 2>&1; then
+  if minikube status >/dev/null 2>&1; then
+    echo "Minikube is already running."
+  else
+    echo "Starting minikube so deploy features are available..."
+    minikube start
+  fi
+else
+  echo "Minikube not started automatically. Generate/validate/history will work; deploy features require a reachable Kubernetes context."
+fi
+
+echo "[3/6] Stopping frontend and backend containers to free ports 3000/8000..."
 docker compose stop frontend backend >/dev/null 2>&1 || true
 
-echo "[3/6] Checking backend dependencies..."
+echo "[4/6] Checking backend dependencies..."
 if ! (cd "$BACKEND_DIR" && .venv/bin/python -c "import asyncpg, fastapi, uvicorn" >/dev/null 2>&1); then
   echo "Backend .venv is missing required packages. Installing..."
   (cd "$ROOT_DIR" && backend/.venv/bin/pip install -r backend/requirements.txt)
 fi
 
-echo "[4/6] Applying backend migrations..."
+echo "[5/6] Applying backend migrations..."
 (cd "$BACKEND_DIR" && DATABASE_URL="$LOCAL_DATABASE_URL" KUBECONFIG="$LOCAL_KUBECONFIG" HELM_BIN="$LOCAL_HELM_BIN" .venv/bin/alembic upgrade head)
 
-echo "[5/6] Starting frontend locally on http://localhost:3000 ..."
+echo "[6/6] Starting frontend locally on http://localhost:3000 ..."
 (
   cd "$FRONTEND_DIR"
   npm run dev -- --host 0.0.0.0 >/tmp/helmgen-frontend-dev.log 2>&1
 ) &
 FRONTEND_PID=$!
 
-echo "[6/6] Starting backend locally on http://localhost:8000 ..."
+echo "Starting backend locally on http://localhost:8000 ..."
 echo "DATABASE_URL=$LOCAL_DATABASE_URL"
 echo "KUBECONFIG=$LOCAL_KUBECONFIG"
 echo "HELM_BIN=$LOCAL_HELM_BIN"
 echo
 echo "Open http://localhost:3000 and use the site normally."
+echo "This is the main development mode for the project."
 echo "Press Ctrl+C to stop frontend, backend and db started for this mode."
 echo "Frontend log: /tmp/helmgen-frontend-dev.log"
 echo "Backend log:  current terminal"

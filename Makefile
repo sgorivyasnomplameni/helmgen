@@ -1,4 +1,10 @@
-.PHONY: backend-check backend-test frontend-check deploy-ready minikube-up backend-restart deploy-ready-local stop-local-mode status-local-mode
+.PHONY: dev dev-deploy-local backend-check backend-test backend-dev-local frontend-check deploy-ready minikube-up backend-restart deploy-ready-local stop-local-mode status-local-mode
+
+dev:
+	bash scripts/run-backend-local-deploy.sh
+
+dev-deploy-local:
+	$(MAKE) dev
 
 backend-check:
 	PYTHONPYCACHEPREFIX=/tmp/helmgen-pycache backend/.venv/bin/python -m compileall -q backend/app backend/alembic backend/tests
@@ -6,6 +12,9 @@ backend-check:
 
 backend-test:
 	backend/.venv/bin/pytest backend/tests/test_renderer.py backend/tests/test_recommender.py
+
+backend-dev-local:
+	bash scripts/run-backend-local.sh
 
 frontend-check:
 	cd frontend && npm run type-check && npm run build
@@ -19,8 +28,8 @@ backend-restart:
 deploy-ready: minikube-up backend-restart
 	@echo "Local deploy environment is ready."
 
-deploy-ready-local: minikube-up
-	bash scripts/run-backend-local-deploy.sh
+deploy-ready-local:
+	$(MAKE) dev
 
 stop-local-mode:
 	docker compose stop backend frontend db

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import AuditList from '@/components/AuditList'
 import { auditApi } from '@/api/audit'
 import { chartsApi, extractApiErrorMessage } from '@/api/charts'
+import { projectsApi } from '@/api/projects'
 import type { AuditEvent } from '@/types/audit'
 import type { Chart } from '@/types/chart'
+import type { Project } from '@/types/project'
 
 const pageShell: React.CSSProperties = {
   maxWidth: '1200px',
@@ -65,6 +67,7 @@ interface Props {
 
 export default function HistoryPage({ active = true, onOpenOps }: Props) {
   const [charts, setCharts] = useState<Chart[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [recentEvents, setRecentEvents] = useState<AuditEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -76,9 +79,14 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
     setError(null)
     setActionNote({ tone: 'neutral', text: 'Загружаем историю Helm-чартов...' })
     try {
-      const [data, events] = await Promise.all([chartsApi.list(), auditApi.recent(8)])
+      const [data, events, loadedProjects] = await Promise.all([
+        chartsApi.list(),
+        auditApi.recent(8),
+        projectsApi.list(),
+      ])
       setCharts(data)
       setRecentEvents(events)
+      setProjects(loadedProjects)
       setActionNote({
         tone: 'success',
         text: data.length > 0 ? `История обновлена: ${data.length} chart(ов).` : 'История загружена. Пока записей нет.',
@@ -122,6 +130,8 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
   function handleDownload(chartId: number, name: string, version: string) {
     void chartsApi.download(chartId, `${name}-${version}.tgz`)
   }
+
+  const projectNameById = new Map(projects.map(project => [project.id, project.name]))
 
   return (
     <div style={pageShell}>
@@ -287,6 +297,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                       {chart.description || 'Описание не указано'}
                     </div>
                     <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                      <span>Проект: {chart.project_id ? (projectNameById.get(chart.project_id) || `#${chart.project_id}`) : 'Без проекта'}</span>
                       <span>Chart: {chart.chart_version}</span>
                       <span>App: {chart.app_version}</span>
                       {chart.validation_status && <span>Lint: {chart.validation_status === 'passed' ? 'ok' : 'ошибка'}</span>}

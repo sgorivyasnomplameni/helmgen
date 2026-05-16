@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chart import Chart
+from app.models.project import Project
 from app.models.user import User
 from app.schemas.chart import (
     ChartCreate,
@@ -74,7 +75,15 @@ class ChartOperationsService:
             raise HTTPException(status_code=404, detail="Chart not found")
         return chart
 
+    async def get_owned_project(self, project_id: int) -> Project:
+        project = await self.db.get(Project, project_id)
+        if not project or project.owner_id != self.current_user.id:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return project
+
     async def create_chart(self, data: ChartCreate) -> Chart:
+        if data.project_id is not None:
+            await self.get_owned_project(data.project_id)
         chart = Chart(**data.model_dump(), lifecycle_status="draft", owner_id=self.current_user.id)
         self.db.add(chart)
         await self.db.flush()
@@ -91,7 +100,10 @@ class ChartOperationsService:
 
     async def update_chart(self, chart_id: int, data: ChartUpdate) -> Chart:
         chart = await self.get_owned_chart(chart_id)
-        for field, value in data.model_dump(exclude_none=True).items():
+        payload = data.model_dump(exclude_none=True)
+        if "project_id" in payload and payload["project_id"] is not None:
+            await self.get_owned_project(payload["project_id"])
+        for field, value in payload.items():
             setattr(chart, field, value)
         log_audit_event(
             self.db,

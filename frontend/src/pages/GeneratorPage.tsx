@@ -1,4 +1,4 @@
-import { useDeferredValue, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import type { ChartConfig, WorkloadType, ServiceType, YamlTab } from '@/types/generator'
 import WorkloadCard from '@/components/WorkloadCard'
 import ToggleSwitch from '@/components/ToggleSwitch'
@@ -8,6 +8,8 @@ import {
   type ChartValidationResult,
   extractApiErrorMessage,
 } from '@/api/charts'
+import { projectsApi } from '@/api/projects'
+import type { Project } from '@/types/project'
 import {
   generateChartYaml,
   generateDeploymentYaml,
@@ -305,7 +307,7 @@ interface ActionButtonConfig {
 }
 
 type FormErrors = Partial<Record<
-  'appName' | 'version' | 'image' | 'imageTag' | 'containerPort' | 'servicePort' | 'ingressHost' | 'ingressPath',
+  'projectId' | 'appName' | 'version' | 'image' | 'imageTag' | 'containerPort' | 'servicePort' | 'ingressHost' | 'ingressPath',
   string
 >>
 
@@ -353,6 +355,11 @@ interface GeneratorPageProps {
 export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPageProps) {
   const formCardRef = useRef<HTMLDivElement | null>(null)
   const [config, setConfig] = useState<ChartConfig>(DEFAULT_CONFIG)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
+  const [newProjectName, setNewProjectName] = useState('')
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true)
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [formErrors, setFormErrors] = useState<FormErrors>({})
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [generatedChartId, setGeneratedChartId] = useState<number | null>(null)
@@ -364,6 +371,35 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   const [previewTab, setPreviewTab] = useState<YamlTab>('deployment.yaml')
   const [showScenarios, setShowScenarios] = useState(false)
   const deferredConfig = useDeferredValue(config)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadProjects() {
+      setIsLoadingProjects(true)
+      try {
+        const data = await projectsApi.list()
+        if (cancelled) return
+        setProjects(data)
+        setSelectedProjectId(prev => prev ?? data[0]?.id ?? null)
+      } catch (error) {
+        if (cancelled) return
+        setActionNote({
+          tone: 'error',
+          text: extractApiErrorMessage(error, 'Не удалось загрузить список проектов.'),
+        })
+      } finally {
+        if (!cancelled) {
+          setIsLoadingProjects(false)
+        }
+      }
+    }
+
+    void loadProjects()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function resetGenerationState() {
     setStatus('idle')
@@ -437,6 +473,10 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   function validateConfig(): FormErrors {
     const errors: FormErrors = {}
 
+    if (!selectedProjectId) {
+      errors.projectId = 'Выберите проект или создайте новый.'
+    }
+
     if (!config.appName.trim()) {
       errors.appName = 'Укажите название приложения.'
     } else if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(config.appName.trim())) {
@@ -480,6 +520,41 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     return errors
   }
 
+  async function handleCreateProject() {
+    const trimmedName = newProjectName.trim()
+    if (!trimmedName) {
+      setFormErrors(prev => ({ ...prev, projectId: 'Укажите название нового проекта.' }))
+      return
+    }
+
+    setIsCreatingProject(true)
+    try {
+      const project = await projectsApi.create({
+        name: trimmedName,
+        description: `Проект для Helm-чартов ${trimmedName}`,
+      })
+      setProjects(prev => [project, ...prev])
+      setSelectedProjectId(project.id)
+      setNewProjectName('')
+      setFormErrors(prev => {
+        const next = { ...prev }
+        delete next.projectId
+        return next
+      })
+      setActionNote({
+        tone: 'success',
+        text: `Проект ${project.name} создан. Теперь chart будет сохранён внутри него.`,
+      })
+    } catch (error) {
+      setActionNote({
+        tone: 'error',
+        text: extractApiErrorMessage(error, 'Не удалось создать проект.'),
+      })
+    } finally {
+      setIsCreatingProject(false)
+    }
+  }
+
   function handleDownload() {
     if (!generatedChartId) return
     void chartsApi.download(generatedChartId, `${config.appName}-${config.version}.tgz`)
@@ -500,6 +575,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
     try {
       const payload = {
+        project_id: selectedProjectId ?? undefined,
         name: config.appName,
         description: `Generated chart for ${config.appName}`,
         chart_version: config.version,
@@ -1070,6 +1146,66 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
           <p style={sectionTitle}>Основные параметры</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <Grid2>
+              <Field label="Проект">
+                <div>
+                  <select
+                    style={{
+                      ...input,
+                      border: formErrors.projectId ? '1px solid var(--danger)' : input.border,
+                    }}
+                    value={selectedProjectId ?? ''}
+                    onChange={event => {
+                      const raw = event.target.value
+                      setSelectedProjectId(raw ? Number(raw) : null)
+                      setFormErrors(prev => {
+                        const next = { ...prev }
+                        delete next.projectId
+                        return next
+                      })
+                    }}
+                    disabled={isLoadingProjects}
+                  >
+                    <option value="">
+                      {isLoadingProjects ? 'Загружаем проекты...' : 'Выберите проект'}
+                    </option>
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.55rem' }}>
+                    <input
+                      style={input}
+                      placeholder="Новый проект, например orders-platform"
+                      value={newProjectName}
+                      onChange={event => setNewProjectName(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateProject()}
+                      disabled={isCreatingProject}
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: '0.65rem',
+                        padding: '0.7rem 0.9rem',
+                        background: 'var(--panel-contrast)',
+                        color: 'var(--text)',
+                        fontWeight: 700,
+                        cursor: isCreatingProject ? 'progress' : 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {isCreatingProject ? 'Создание...' : 'Создать'}
+                    </button>
+                  </div>
+                  {formErrors.projectId && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                      {formErrors.projectId}
+                    </div>
+                  )}
+                </div>
+              </Field>
               <Field label="Название приложения">
                 <div>
                   <input

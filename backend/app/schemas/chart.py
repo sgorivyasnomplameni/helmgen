@@ -5,6 +5,7 @@ from pydantic import BaseModel
 class ChartBase(BaseModel):
     name: str
     description: str | None = None
+    project_id: int | None = None
     chart_version: str = "0.1.0"
     app_version: str = "latest"
     values_yaml: str | None = None

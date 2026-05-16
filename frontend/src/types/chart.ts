@@ -1,5 +1,6 @@
 export interface Chart {
   id: number
+  project_id: number | null
   name: string
   description: string | null
   chart_version: string
@@ -30,6 +31,7 @@ export interface Chart {
 }
 
 export interface ChartCreate {
+  project_id?: number
   name: string
   description?: string
   chart_version?: string
@@ -38,6 +40,7 @@ export interface ChartCreate {
 }
 
 export interface ChartUpdate {
+  project_id?: number
   name?: string
   description?: string
   chart_version?: string

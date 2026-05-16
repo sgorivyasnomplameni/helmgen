@@ -10,6 +10,7 @@ from alembic import context
 from app.config import settings
 from app.database import Base
 import app.models.chart  # noqa: F401 — ensure models are registered
+import app.models.project  # noqa: F401 — ensure models are registered
 import app.models.user  # noqa: F401 — ensure models are registered
 import app.models.audit_event  # noqa: F401 — ensure models are registered
 

@@ -44,22 +44,38 @@ AUTH_TOKEN_TTL_MINUTES=1440
 
 Если файла нет, можно взять за основу [`.env.example`](/home/e25g56jk/helmgen/.env.example).
 
+## Рекомендуемый запуск
+
+У проекта есть одна основная команда:
+
+```bash
+make dev
+```
+
+Она:
+- поднимает `db` в Docker;
+- автоматически применяет миграции Alembic;
+- запускает `frontend` локально;
+- запускает `backend` локально;
+- если в системе доступен `minikube`, пытается подготовить и локальный deploy-сценарий.
+
+Для большинства случаев этого режима достаточно.
+
 ## Режимы запуска
 
-Сейчас у проекта есть два нормальных режима.
-
-### 1. Обычный режим
+### Основной режим
 
 Подходит для:
 - генерации;
 - проверки;
 - истории;
-- интерфейсной работы без локального deploy через `minikube`.
+- интерфейсной работы;
+- локального deploy, если доступен рабочий Kubernetes context.
 
 Запуск:
 
 ```bash
-docker compose up --build
+make dev
 ```
 
 После запуска открой:
@@ -67,38 +83,15 @@ docker compose up --build
 - `http://localhost:8000/docs` — Swagger
 - `http://localhost:8000/health` — healthcheck backend
 
-В этом режиме всё работает в Docker:
-- `frontend`
-- `backend`
-- `db`
-
-### 2. Локальный deploy-режим
-
-Подходит для проверки полного цикла:
-- `render`
-- `dry-run`
-- `deploy`
-- `uninstall`
-
-Этот режим нужен, потому что локально `minikube` проще всего доступен для backend, запущенного на хосте.
-
-Запуск:
-
-```bash
-make deploy-ready-local
-```
-
-Что делает эта команда:
-- запускает `minikube`, если нужно;
-- поднимает `db` в Docker;
-- останавливает docker-контейнеры `frontend` и `backend`;
-- запускает `frontend` локально;
-- запускает `backend` локально.
+В этом режиме:
+- `db` работает в Docker;
+- `frontend` работает локально;
+- `backend` работает локально.
 
 Важно:
-- этот режим альтернативный;
+- это главный способ запуска проекта;
 - не нужно параллельно запускать `docker compose up --build`;
-- если нажать `Ctrl+C`, локальный deploy-режим остановится целиком.
+- если нажать `Ctrl+C`, основной режим остановится целиком.
 
 Полезные команды:
 
@@ -111,6 +104,21 @@ make status-local-mode
 make stop-local-mode
 ```
 Останавливает `backend`, `frontend` и `db`, если они остались запущенными.
+
+### Дополнительный локальный backend-режим
+
+Подходит, если нужно просто поднять backend на хосте и автоматически применить миграции перед стартом.
+
+Запуск:
+
+```bash
+make backend-dev-local
+```
+
+Что делает эта команда:
+- проверяет зависимости backend;
+- выполняет `alembic upgrade head`;
+- запускает `uvicorn` локально на `http://localhost:8000`.
 
 ## Что делать после запуска
 
@@ -162,7 +170,7 @@ make stop-local-mode
 Этот сценарий лучше проверять в режиме:
 
 ```bash
-make deploy-ready-local
+make dev
 ```
 
 Порядок:
@@ -213,7 +221,7 @@ kubectl get all -n helmgen-demo
 docker compose ps
 ```
 
-Или, если ты в локальном deploy-режиме, проверь, что терминал с `make deploy-ready-local` всё ещё открыт.
+Проверь, что терминал с `make dev` всё ещё открыт.
 
 ### В `Проверка и deploy` кластер недоступен
 
@@ -244,16 +252,10 @@ helm status orders-api -n helmgen-demo
 
 ### Нажал `Ctrl+C`, и непонятно, что осталось запущенным
 
-Для локального deploy-режима:
+Для основного режима:
 
 ```bash
 make stop-local-mode
-```
-
-Для обычного docker-режима:
-
-```bash
-docker compose down
 ```
 
 ## Тестовые сценарии
@@ -268,14 +270,9 @@ docker compose down
 ## Полезные команды
 
 ```bash
-docker compose up --build
+make dev
 ```
 Обычный запуск проекта.
-
-```bash
-make deploy-ready-local
-```
-Локальный режим для проверки deploy через `minikube`.
 
 ```bash
 make backend-test
@@ -293,11 +290,6 @@ make frontend-check
 Проверка фронта (`type-check` + `build`).
 
 ```bash
-docker compose down
-```
-Остановить обычный docker-режим.
-
-```bash
 make stop-local-mode
 ```
-Остановить локальный deploy-режим.
+Остановить основной режим разработки.

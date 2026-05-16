@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import audit, auth, charts
+from app.routers import audit, auth, charts, projects
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
 
@@ -15,6 +15,7 @@ app.add_middleware(
 )
 
 app.include_router(charts.router, prefix="/api/charts", tags=["charts"])
+app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
 
