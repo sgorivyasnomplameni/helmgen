@@ -1,12 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { chartsApi } from '@/api/charts'
+import Button from '@/components/Button'
+import CodeBlock from '@/components/CodeBlock'
+import StatusPill from '@/components/StatusPill'
 import type { ChartConfig, YamlTab } from '@/types/generator'
 import {
-  generateDeploymentYaml,
-  generateServiceYaml,
-  generateIngressYaml,
   generateChartYaml,
+  generateDeploymentYaml,
+  generateIngressYaml,
+  generateServiceYaml,
 } from '@/utils/yamlGenerator'
-import { chartsApi } from '@/api/charts'
 
 interface Props {
   config: ChartConfig
@@ -20,9 +23,9 @@ const ALL_TABS: YamlTab[] = ['deployment.yaml', 'service.yaml', 'ingress.yaml', 
 function getContent(tab: YamlTab, config: ChartConfig): string {
   switch (tab) {
     case 'deployment.yaml': return generateDeploymentYaml(config)
-    case 'service.yaml':    return generateServiceYaml(config)
-    case 'ingress.yaml':    return generateIngressYaml(config)
-    case 'Chart.yaml':      return generateChartYaml(config)
+    case 'service.yaml': return generateServiceYaml(config)
+    case 'ingress.yaml': return generateIngressYaml(config)
+    case 'Chart.yaml': return generateChartYaml(config)
   }
 }
 
@@ -35,6 +38,7 @@ function isTabDisabled(tab: YamlTab, config: ChartConfig): boolean {
 export default function YamlPreview({ config, chartId, chartName, chartVersion }: Props) {
   const [activeTab, setActiveTab] = useState<YamlTab>('deployment.yaml')
   const [copied, setCopied] = useState(false)
+  const [expanded, setExpanded] = useState(false)
 
   const handleDownload = () => {
     if (!chartId) return
@@ -59,92 +63,53 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
   return (
     <div
       style={{
-        background: 'var(--surface-elevated)',
+        background: 'var(--surface-base)',
         border: '1px solid var(--border-subtle)',
         borderRadius: '1rem',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        minHeight: '600px',
+        minHeight: expanded ? '760px' : '560px',
         boxShadow: 'var(--shadow)',
       }}
     >
-      {/* Header */}
       <div
         style={{
-          padding: '1rem 1.25rem 0',
-          background: 'var(--surface-elevated)',
+          padding: '1rem 1.1rem 0.9rem',
+          background: 'var(--surface-base)',
+          borderBottom: '1px solid var(--border-subtle)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-            Предпросмотр YAML
-          </span>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {chartId && (
-            <button
-              onClick={handleDownload}
-              title={`Скачать ${chartName}-${chartVersion}.tgz`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                background: 'var(--accent-soft)',
-                color: 'var(--accent-contrast)',
-                border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
-                borderRadius: '0.375rem',
-                padding: '0.3rem 0.7rem',
-                fontSize: '0.75rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 9h-4V3H9v6H5l7 7 7-7zm-8 2V5h2v6h1.17L12 13.17 9.83 11H11zm-6 7h14v2H5v-2z" />
-              </svg>
-              Скачать .tgz
-            </button>
-          )}
-          <button
-            onClick={handleCopy}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                background: copied ? 'var(--success-soft)' : 'var(--surface-muted)',
-                color: copied ? 'var(--success)' : 'var(--text-muted)',
-                border: copied
-                  ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
-                  : '1px solid var(--border-subtle)',
-                borderRadius: '0.375rem',
-                padding: '0.3rem 0.7rem',
-                fontSize: '0.75rem',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-          >
-            {copied ? (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                </svg>
-                Скопировано
-              </>
-            ) : (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
-                </svg>
-                Копировать
-              </>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.85rem', marginBottom: '0.9rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gap: '0.32rem' }}>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.77rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              Результат
+            </span>
+            <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>
+              Предпросмотр манифеста
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.5 }}>
+              Проверяй структуру файлов chart до lint и deploy. Неактивные вкладки означают, что сущность ещё не включена в конфигурацию.
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <Button type="button" tone={copied ? 'success' : 'secondary'} size="sm" onClick={handleCopy}>
+              {copied ? 'Скопировано' : 'Скопировать'}
+            </Button>
+            {chartId && (
+              <Button type="button" tone="secondary" size="sm" onClick={handleDownload} title={`Скачать ${chartName}-${chartVersion}.tgz`}>
+                Скачать
+              </Button>
             )}
-          </button>
+            <Button type="button" tone="ghost" size="sm" onClick={() => setExpanded(prev => !prev)}>
+              {expanded ? 'Свернуть' : 'Развернуть'}
+            </Button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: '0.125rem', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', alignItems: 'center' }}>
           {ALL_TABS.map(tab => {
             const disabled = isTabDisabled(tab, config)
             const active = activeTab === tab
@@ -154,48 +119,39 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
                 onClick={() => !disabled && setActiveTab(tab)}
                 disabled={disabled}
                 style={{
-                  padding: '0.5rem 0.875rem',
-                  fontSize: '0.75rem',
+                  padding: '0.42rem 0.72rem',
+                  fontSize: '0.74rem',
                   fontFamily: 'monospace',
-                  border: 'none',
-                  borderRadius: '0.375rem 0.375rem 0 0',
+                  border: active ? '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' : '1px solid var(--border-subtle)',
+                  borderRadius: '999px',
                   cursor: disabled ? 'not-allowed' : 'pointer',
-                  background: active ? 'var(--surface-muted)' : 'transparent',
-                  color: disabled ? 'var(--text-muted)' : active ? 'var(--text)' : 'var(--text-muted)',
-                  borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
-                  transition: 'all 0.15s',
+                  background: active ? 'var(--accent-soft)' : 'var(--surface-elevated)',
+                  color: disabled ? 'var(--text-muted)' : active ? 'var(--accent-contrast)' : 'var(--text-soft)',
                   whiteSpace: 'nowrap',
-                  opacity: disabled ? 0.45 : 1,
+                  opacity: disabled ? 0.5 : 1,
                 }}
               >
-                {tab}
+                {tab}{disabled ? ' · не создан' : ''}
               </button>
             )
           })}
+          <StatusPill tone="dark" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+            YAML
+          </StatusPill>
         </div>
       </div>
 
-      {/* Code area */}
       <div
         style={{
           flex: 1,
-          background: 'var(--code-surface)',
-          padding: '1.25rem',
+          background: 'var(--surface-muted)',
+          padding: '1rem',
           overflow: 'auto',
         }}
       >
-        <pre
-          style={{
-            margin: 0,
-            fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-            fontSize: '0.78rem',
-            lineHeight: 1.7,
-            color: 'var(--code-text)',
-            whiteSpace: 'pre',
-          }}
-        >
+        <CodeBlock minHeight={expanded ? 640 : 440} style={{ whiteSpace: 'pre' }}>
           {content}
-        </pre>
+        </CodeBlock>
       </div>
     </div>
   )

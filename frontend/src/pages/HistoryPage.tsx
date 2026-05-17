@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import AuditList from '@/components/AuditList'
+import Button from '@/components/Button'
+import StatusPill from '@/components/StatusPill'
 import { auditApi } from '@/api/audit'
 import { chartsApi, extractApiErrorMessage } from '@/api/charts'
 import { projectsApi } from '@/api/projects'
@@ -18,15 +20,6 @@ const card: React.CSSProperties = {
   borderRadius: '1rem',
   border: '1px solid var(--border-subtle)',
   boxShadow: 'var(--shadow)',
-}
-
-const actionButton: React.CSSProperties = {
-  border: 'none',
-  borderRadius: '0.6rem',
-  padding: '0.65rem 0.9rem',
-  fontSize: '0.82rem',
-  fontWeight: 700,
-  cursor: 'pointer',
 }
 
 function formatDate(value: string): string {
@@ -170,18 +163,9 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
               {charts.length}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadCharts()}
-            disabled={loading}
-            style={{
-              ...actionButton,
-              background: loading ? 'var(--border-strong)' : 'var(--surface-contrast)',
-              color: 'var(--text)',
-            }}
-          >
+          <Button type="button" tone="secondary" size="sm" onClick={() => void loadCharts()} disabled={loading}>
             {loading ? 'Обновление...' : 'Обновить'}
-          </button>
+          </Button>
         </div>
 
         {error && (
@@ -253,101 +237,65 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                   key={chart.id}
                   style={{
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: '0.9rem',
-                    padding: '1rem',
+                    borderRadius: '1rem',
+                    padding: '1rem 1.05rem',
                     display: 'grid',
                     gridTemplateColumns: 'minmax(0, 1fr) auto',
                     gap: '1rem',
                     alignItems: 'center',
+                    background: 'linear-gradient(180deg, var(--surface-base) 0%, var(--surface-muted) 100%)',
                   }}
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
+                      <div style={{ fontSize: '1.08rem', fontWeight: 900, color: 'var(--text)' }}>
                         {chart.name}
                       </div>
-                      <span
-                        style={{
-                          padding: '0.25rem 0.55rem',
-                          borderRadius: '999px',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          background: isGenerated ? 'var(--success-soft)' : 'var(--warning-soft)',
-                          color: isGenerated ? 'var(--success)' : 'var(--warning)',
-                        }}
-                      >
+                      <StatusPill tone={isGenerated ? 'success' : 'warning'}>
                         {formatLifecycleStatus(chart.lifecycle_status || (isGenerated ? 'generated' : 'draft'))}
-                      </span>
+                      </StatusPill>
                       {isDeployed && (
-                        <span
-                          style={{
-                            padding: '0.25rem 0.55rem',
-                            borderRadius: '999px',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            background: 'var(--accent-soft)',
-                            color: 'var(--accent-contrast)',
-                          }}
-                        >
+                        <StatusPill tone="accent">
                           {chart.deployed_namespace || 'default'} / {chart.deployed_release_name || chart.name}
-                        </span>
+                        </StatusPill>
                       )}
                     </div>
                     <div style={{ marginTop: '0.45rem', color: 'var(--text-soft)', fontSize: '0.88rem' }}>
                       {chart.description || 'Описание не указано'}
                     </div>
-                    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                      <span>Проект: {chart.project_id ? (projectNameById.get(chart.project_id) || `#${chart.project_id}`) : 'Без проекта'}</span>
-                      <span>Chart: {chart.chart_version}</span>
-                      <span>App: {chart.app_version}</span>
-                      {chart.validation_status && <span>Lint: {chart.validation_status === 'passed' ? 'ok' : 'ошибка'}</span>}
-                      {hasDryRun && <span>Dry-run: {chart.dry_run_status === 'passed' ? 'ok' : 'ошибка'}</span>}
+                    <div style={{ marginTop: '0.8rem', display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
+                      <StatusPill tone="neutral">Проект: {chart.project_id ? (projectNameById.get(chart.project_id) || `#${chart.project_id}`) : 'Без проекта'}</StatusPill>
+                      <StatusPill tone="neutral">Chart {chart.chart_version}</StatusPill>
+                      <StatusPill tone="neutral">App {chart.app_version}</StatusPill>
+                      {chart.validation_status && (
+                        <StatusPill tone={chart.validation_status === 'passed' ? 'success' : 'danger'}>
+                          Lint: {chart.validation_status === 'passed' ? 'ok' : 'ошибка'}
+                        </StatusPill>
+                      )}
+                      {hasDryRun && (
+                        <StatusPill tone={chart.dry_run_status === 'passed' ? 'success' : 'warning'}>
+                          Dry-run: {chart.dry_run_status === 'passed' ? 'ok' : 'ошибка'}
+                        </StatusPill>
+                      )}
+                    </div>
+                    <div style={{ marginTop: '0.7rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
                       <span>Создан: {formatDate(chart.created_at)}</span>
                       {chart.deployed_at && <span>Deploy: {formatDate(chart.deployed_at)}</span>}
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
                     {onOpenOps && (
-                      <button
-                        type="button"
-                        disabled={!isGenerated}
-                        onClick={() => onOpenOps(chart.id)}
-                        style={{
-                          ...actionButton,
-                          background: 'var(--surface-contrast)',
-                          color: isGenerated ? 'var(--text)' : 'var(--text-muted)',
-                          cursor: isGenerated ? 'pointer' : 'not-allowed',
-                        }}
-                      >
+                      <Button type="button" tone="secondary" size="sm" disabled={!isGenerated} onClick={() => onOpenOps(chart.id)}>
                         Проверка и deploy
-                      </button>
+                      </Button>
                     )}
-                    <button
-                      type="button"
-                      disabled={!isGenerated}
-                      onClick={() => handleDownload(chart.id, chart.name, chart.chart_version)}
-                      style={{
-                        ...actionButton,
-                        background: isGenerated ? 'var(--accent-soft)' : 'var(--surface-contrast)',
-                        color: isGenerated ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                        cursor: isGenerated ? 'pointer' : 'not-allowed',
-                      }}
-                    >
+                    <Button type="button" tone="primary" size="sm" disabled={!isGenerated} onClick={() => handleDownload(chart.id, chart.name, chart.chart_version)}>
                       Скачать
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDelete(chart.id)}
-                      disabled={deletingId === chart.id}
-                      style={{
-                        ...actionButton,
-                        background: deletingId === chart.id ? 'var(--danger-soft)' : 'var(--danger-soft)',
-                        color: 'var(--danger)',
-                      }}
-                    >
+                    </Button>
+                    <Button type="button" tone="danger" size="sm" onClick={() => void handleDelete(chart.id)} disabled={deletingId === chart.id}>
                       {deletingId === chart.id ? 'Удаление...' : 'Удалить'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )

@@ -1,8 +1,9 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
-import type { ChartConfig, WorkloadType, ServiceType, YamlTab } from '@/types/generator'
+import type { ChartConfig, WorkloadType, ServiceType } from '@/types/generator'
 import WorkloadCard from '@/components/WorkloadCard'
 import ToggleSwitch from '@/components/ToggleSwitch'
 import RecommendationsBlock from '@/components/RecommendationsBlock'
+import YamlPreview from '@/components/YamlPreview'
 import {
   chartsApi,
   type ChartValidationResult,
@@ -11,10 +12,6 @@ import {
 import { projectsApi } from '@/api/projects'
 import type { Project } from '@/types/project'
 import {
-  generateChartYaml,
-  generateDeploymentYaml,
-  generateIngressYaml,
-  generateServiceYaml,
   generateValuesYaml,
 } from '@/utils/yamlGenerator'
 
@@ -50,8 +47,6 @@ const DEFAULT_CONFIG: ChartConfig = {
 
 const WORKLOAD_TYPES: WorkloadType[] = ['Deployment', 'StatefulSet', 'DaemonSet']
 const SERVICE_TYPES: ServiceType[] = ['ClusterIP', 'NodePort', 'LoadBalancer']
-const PREVIEW_TABS: YamlTab[] = ['deployment.yaml', 'service.yaml', 'ingress.yaml', 'Chart.yaml']
-
 type WorkspaceSection = 'preview' | 'lint'
 
 interface DemoScenario {
@@ -240,7 +235,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
 const card: React.CSSProperties = {
   background: 'var(--surface-base)',
   borderRadius: '0.875rem',
-  padding: '1.5rem',
+  padding: '1.2rem',
   boxShadow: 'var(--shadow)',
   border: '1px solid var(--border-subtle)',
 }
@@ -271,7 +266,22 @@ const sectionTitle: React.CSSProperties = {
   fontSize: '1rem',
   fontWeight: 700,
   color: 'var(--text)',
-  marginBottom: '1.25rem',
+  marginBottom: '0.35rem',
+}
+
+const sectionHint: React.CSSProperties = {
+  margin: '0 0 1rem',
+  fontSize: '0.82rem',
+  color: 'var(--text-muted)',
+  lineHeight: 1.5,
+}
+
+const nestedPanel: React.CSSProperties = {
+  marginTop: '0.9rem',
+  padding: '0.9rem',
+  borderRadius: '0.85rem',
+  background: 'var(--surface-elevated)',
+  border: '1px solid var(--border-subtle)',
 }
 
 const divider: React.CSSProperties = {
@@ -311,25 +321,6 @@ type FormErrors = Partial<Record<
   string
 >>
 
-function getPreviewContent(tab: YamlTab, config: ChartConfig): string {
-  switch (tab) {
-    case 'deployment.yaml':
-      return generateDeploymentYaml(config)
-    case 'service.yaml':
-      return generateServiceYaml(config)
-    case 'ingress.yaml':
-      return generateIngressYaml(config)
-    case 'Chart.yaml':
-      return generateChartYaml(config)
-  }
-}
-
-function isPreviewTabDisabled(tab: YamlTab, config: ChartConfig): boolean {
-  if (tab === 'service.yaml') return !config.service.enabled
-  if (tab === 'ingress.yaml') return !config.ingress.enabled
-  return false
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -341,7 +332,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Grid2({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
       {children}
     </div>
   )
@@ -354,6 +345,10 @@ interface GeneratorPageProps {
 
 export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPageProps) {
   const formCardRef = useRef<HTMLDivElement | null>(null)
+  const workflowCardRef = useRef<HTMLDivElement | null>(null)
+  const advancedCardRef = useRef<HTMLDivElement | null>(null)
+  const previewPanelRef = useRef<HTMLDivElement | null>(null)
+  const recommendationsRef = useRef<HTMLDivElement | null>(null)
   const [config, setConfig] = useState<ChartConfig>(DEFAULT_CONFIG)
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
@@ -368,8 +363,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   const [isValidating, setIsValidating] = useState(false)
   const [actionNote, setActionNote] = useState<{ tone: 'neutral' | 'success' | 'error'; text: string } | null>(null)
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('preview')
-  const [previewTab, setPreviewTab] = useState<YamlTab>('deployment.yaml')
   const [showScenarios, setShowScenarios] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const deferredConfig = useDeferredValue(config)
 
   useEffect(() => {
@@ -427,6 +422,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
   function setService<K extends keyof ChartConfig['service']>(k: K, v: ChartConfig['service'][K]) {
     resetGenerationState()
+    setShowAdvanced(true)
     if (k === 'port') {
       setFormErrors(prev => {
         const next = { ...prev }
@@ -439,6 +435,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
   function setIngress<K extends keyof ChartConfig['ingress']>(k: K, v: ChartConfig['ingress'][K]) {
     resetGenerationState()
+    setShowAdvanced(true)
     setFormErrors(prev => {
       const next = { ...prev }
       if (k === 'host') delete next.ingressHost
@@ -450,11 +447,13 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
   function setResources<K extends keyof ChartConfig['resources']>(k: K, v: ChartConfig['resources'][K]) {
     resetGenerationState()
+    setShowAdvanced(true)
     setConfig(prev => ({ ...prev, resources: { ...prev.resources, [k]: v } }))
   }
 
   function setResourcesNested(group: 'requests' | 'limits', key: 'cpu' | 'memory', value: string) {
     resetGenerationState()
+    setShowAdvanced(true)
     setConfig(prev => ({
       ...prev,
       resources: {
@@ -467,6 +466,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   function applyScenario(scenario: DemoScenario) {
     resetGenerationState()
     setFormErrors({})
+    setShowAdvanced(true)
     setConfig(scenario.config)
   }
 
@@ -560,6 +560,21 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     void chartsApi.download(generatedChartId, `${config.appName}-${config.version}.tgz`)
   }
 
+  function handleSaveTemplate() {
+    window.localStorage.setItem(
+      'helmgen-saved-template',
+      JSON.stringify({
+        selectedProjectId,
+        config,
+        savedAt: Date.now(),
+      }),
+    )
+    setActionNote({
+      tone: 'success',
+      text: 'Шаблон сохранён локально в браузере. Его можно использовать как черновик для следующей сессии.',
+    })
+  }
+
   async function handleGenerate() {
     const errors = validateConfig()
     if (Object.keys(errors).length > 0) {
@@ -639,7 +654,6 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         ? 'Чарт готов к проверке, скачиванию или переходу в экран deploy.'
         : 'Заполните форму и запустите сборку.'
 
-  const previewContent = getPreviewContent(previewTab, deferredConfig)
   const configLooksReady = Boolean(
     config.appName.trim()
       && config.version.trim()
@@ -649,6 +663,18 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   )
   const reviewReady = Boolean(validation?.valid)
   const canUseBuiltArtifact = Boolean(generatedChartId && !isDraftDirty)
+  const hasAdvancedOverrides =
+    config.workloadType !== DEFAULT_CONFIG.workloadType
+    || config.service.type !== DEFAULT_CONFIG.service.type
+    || !config.service.enabled
+    || config.ingress.enabled
+    || config.resources.enabled
+  const advancedSummary = [
+    config.workloadType !== DEFAULT_CONFIG.workloadType ? config.workloadType : null,
+    !config.service.enabled ? 'без Service' : config.service.type !== DEFAULT_CONFIG.service.type ? config.service.type : null,
+    config.ingress.enabled ? 'Ingress включен' : null,
+    config.resources.enabled ? 'есть ресурсы' : null,
+  ].filter(Boolean) as string[]
 
   let primaryAction: PrimaryActionConfig = {
     key: 'generate',
@@ -742,6 +768,51 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
     return order[a.key] - order[b.key]
   })
+  const primaryToolbarAction = toolbarActions.find(action => action.primary) ?? toolbarActions[0]
+  const secondaryToolbarActions = toolbarActions.filter(action => !action.primary)
+  const leftMenuItems = [
+    {
+      key: 'audit',
+      label: 'Рекомендации',
+      icon: '⚠️',
+      active: false,
+      onClick: () => recommendationsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+    },
+    {
+      key: 'workflow',
+      label: 'Поток работы',
+      icon: '⚙️',
+      active: !showAdvanced && workspaceSection === 'preview',
+      onClick: () => workflowCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+    },
+    {
+      key: 'form',
+      label: 'Основная форма',
+      icon: '🧩',
+      active: false,
+      onClick: () => formCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+    },
+    {
+      key: 'advanced',
+      label: 'Расширенные',
+      icon: '🛠️',
+      active: showAdvanced,
+      onClick: () => {
+        setShowAdvanced(true)
+        advancedCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      },
+    },
+    {
+      key: 'preview',
+      label: 'Предпросмотр',
+      icon: '✅',
+      active: workspaceSection === 'preview',
+      onClick: () => {
+        setWorkspaceSection('preview')
+        previewPanelRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      },
+    },
+  ]
 
   const progressItems = [
     {
@@ -785,8 +856,44 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         margin: '0 auto',
       }}
     >
-      <div style={{ position: 'sticky', top: '5.75rem' }}>
-        <RecommendationsBlock config={deferredConfig} variant="sidebar" />
+      <div style={{ position: 'sticky', top: '5.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div
+          style={{
+            ...card,
+            padding: '0.75rem',
+            display: 'grid',
+            gap: '0.35rem',
+          }}
+        >
+          {leftMenuItems.map(item => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={item.onClick}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.55rem',
+                width: '100%',
+                padding: '0.8rem 0.85rem',
+                borderRadius: '0.8rem',
+                border: item.active ? '1px solid color-mix(in srgb, var(--accent) 28%, transparent)' : '1px solid transparent',
+                background: item.active ? 'var(--surface-contrast)' : 'transparent',
+                color: item.active ? 'var(--text)' : 'var(--text-soft)',
+                fontWeight: item.active ? 800 : 700,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <span style={{ fontSize: '0.95rem' }}>{item.icon}</span>
+              <span style={{ fontSize: '0.86rem' }}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div ref={recommendationsRef}>
+          <RecommendationsBlock config={deferredConfig} variant="sidebar" />
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -923,46 +1030,108 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         </div>
 
         <div
+          ref={workflowCardRef}
           style={{
             ...card,
-            padding: '0.9rem 1rem',
+            padding: '1rem 1.05rem',
+            display: 'grid',
+            gap: '1rem',
             background: 'var(--surface-base)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '0.9rem' }}>
-            <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Этапы</div>
-            <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
-              {isDraftDirty
-                ? 'Есть изменения'
-                : reviewReady
-                  ? 'Готов к скачиванию'
-                  : generatedChartId
-                    ? 'Чарт создан'
-                    : 'Черновик'}
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Поток работы</div>
+              <div style={{ marginTop: '0.3rem', fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Сначала подготовь конфигурацию, затем собери chart и только после этого запускай проверку.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+              <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                {isDraftDirty
+                  ? 'Есть изменения'
+                  : reviewReady
+                    ? 'Готов к скачиванию'
+                    : generatedChartId
+                      ? 'Чарт создан'
+                      : 'Черновик'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  resetGenerationState()
+                  setFormErrors({})
+                  setShowAdvanced(false)
+                  setConfig(DEFAULT_CONFIG)
+                }}
+                style={{
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '999px',
+                  background: 'var(--surface-elevated)',
+                  color: 'var(--text-soft)',
+                  fontWeight: 700,
+                  fontSize: '0.8rem',
+                  padding: '0.55rem 0.9rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Сбросить
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTemplate}
+                style={{
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '999px',
+                  background: 'var(--surface-elevated)',
+                  color: 'var(--text-soft)',
+                  fontWeight: 700,
+                  fontSize: '0.8rem',
+                  padding: '0.55rem 0.9rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Сохранить шаблон
+              </button>
+              <button
+                type="button"
+                onClick={primaryToolbarAction.onClick}
+                disabled={primaryToolbarAction.disabled}
+                style={{
+                  borderRadius: '999px',
+                  padding: '0.62rem 1rem',
+                  fontSize: '0.86rem',
+                  fontWeight: 800,
+                  cursor: primaryToolbarAction.disabled ? 'not-allowed' : 'pointer',
+                  opacity: primaryToolbarAction.disabled ? 0.5 : 1,
+                  background: primaryToolbarAction.tone === 'success' ? 'var(--success)' : '#4CAF50',
+                  color: '#fff',
+                  border: 'none',
+                }}
+              >
+                {primaryToolbarAction.label}
+              </button>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.6rem', width: '100%' }}>
-              {progressItems.map(item => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={item.onClick}
-                  disabled={item.disabled}
-                  style={{
-                    padding: '0.75rem 0.85rem',
-                    borderRadius: '0.85rem',
-                    border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 30%, var(--border-subtle) 70%)' : item.active ? 'color-mix(in srgb, var(--accent) 30%, var(--border-subtle) 70%)' : 'var(--border-subtle)'}`,
-                    background: item.active ? 'var(--surface-elevated)' : 'var(--surface-base)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.65rem',
-                    cursor: item.disabled ? 'not-allowed' : 'pointer',
-                    opacity: item.disabled ? 0.55 : 1,
-                    textAlign: 'left',
-                  }}
-                >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.7rem' }}>
+            {progressItems.map(item => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={item.onClick}
+                disabled={item.disabled}
+                style={{
+                  padding: '0.8rem 0.85rem',
+                  borderRadius: '0.85rem',
+                  border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 30%, var(--border-subtle) 70%)' : item.active ? 'color-mix(in srgb, var(--accent) 30%, var(--border-subtle) 70%)' : 'var(--border-subtle)'}`,
+                  background: item.active ? 'var(--surface-elevated)' : 'var(--surface-base)',
+                  cursor: item.disabled ? 'not-allowed' : 'pointer',
+                  opacity: item.disabled ? 0.55 : 1,
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                   <span
                     style={{
                       width: '1.8rem',
@@ -981,132 +1150,70 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   >
                     {item.done ? '✓' : item.key === 'config' ? '1' : item.key === 'chart' ? '2' : '3'}
                   </span>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: '0.18rem', minWidth: 0 }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text)' }}>{item.label}</span>
-                    <span style={{ fontSize: '0.72rem', color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)' }}>
-                      {item.state}
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text)' }}>{item.label}</span>
+                </div>
+                <div style={{ marginTop: '0.45rem', fontSize: '0.74rem', color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)' }}>
+                  {item.state}
+                </div>
+              </button>
+            ))}
           </div>
-        </div>
 
-        <div
-          style={{
-            ...card,
-            padding: '0.95rem 1rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem',
-            background: 'var(--surface-base)',
-          }}
-        >
-          <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Действия</div>
-          <div style={{ display: 'grid', gap: '0.85rem' }}>
-            <div>
-              <div style={{ marginBottom: '0.55rem', fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Основное
-              </div>
-              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                {toolbarActions.filter(action => action.primary).map(action => (
+          <div
+            style={{
+              padding: '0.9rem 1rem',
+              borderRadius: '0.9rem',
+              background: 'var(--surface-elevated)',
+              border: '1px solid var(--border-subtle)',
+              display: 'grid',
+              gap: '0.65rem',
+            }}
+          >
+            <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Контекст
+            </div>
+            <div style={{ fontSize: '0.82rem', color: Object.keys(formErrors).length > 0 ? 'var(--danger)' : 'var(--text-muted)', lineHeight: 1.5 }}>
+              {Object.keys(formErrors).length > 0
+                ? 'Исправьте ошибки в форме, чтобы перейти к генерации Helm-чарта.'
+                : latestResultSummary}
+            </div>
+            {secondaryToolbarActions.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
+                {secondaryToolbarActions.map(action => (
                   <button
                     key={action.key}
                     type="button"
                     onClick={action.onClick}
                     disabled={action.disabled}
                     style={{
-                      borderRadius: '0.8rem',
-                      padding: '0.9rem 1.15rem',
-                      fontSize: '0.98rem',
-                      fontWeight: 800,
+                      borderRadius: '0.75rem',
+                      padding: '0.7rem 0.9rem',
+                      fontSize: '0.84rem',
+                      fontWeight: 700,
                       cursor: action.disabled ? 'not-allowed' : 'pointer',
                       opacity: action.disabled ? 0.5 : 1,
-                      minWidth: '220px',
-                      background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--accent-strong)',
-                      color: action.tone === 'success' ? 'var(--success)' : '#fff',
+                      background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--surface-base)',
+                      color: action.tone === 'success' ? 'var(--success)' : 'var(--text-soft)',
                       border: action.tone === 'success'
                         ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
-                        : '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+                        : '1px solid var(--border-subtle)',
                     }}
                   >
                     {action.label}
                   </button>
                 ))}
               </div>
-            </div>
-
-            {toolbarActions.filter(action => !action.primary).length > 0 && (
-              <div>
-                <div style={{ marginBottom: '0.55rem', fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Дальше
-                </div>
-                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                  {toolbarActions.filter(action => !action.primary).map(action => (
-                    <button
-                      key={action.key}
-                      type="button"
-                      onClick={action.onClick}
-                      disabled={action.disabled}
-                      style={{
-                        borderRadius: '0.75rem',
-                        padding: '0.78rem 0.95rem',
-                        fontSize: '0.9rem',
-                        fontWeight: 700,
-                        cursor: action.disabled ? 'not-allowed' : 'pointer',
-                        opacity: action.disabled ? 0.5 : 1,
-                        background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--surface-elevated)',
-                        color: action.tone === 'success' ? 'var(--success)' : 'var(--text-soft)',
-                        border: action.tone === 'success'
-                          ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
-                          : '1px solid var(--border-subtle)',
-                      }}
-                    >
-                      {action.label}
-                    </button>
-                  ))}
-                </div>
+            )}
+            {generatedChartId && (
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                Рендер и dry-run доступны на отдельной странице deploy.
               </div>
             )}
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-            {generatedChartId && (
-              <>
-                <span
-                  style={{
-                    ...stepChipBase,
-                    padding: '0.35rem 0.6rem',
-                    background: 'var(--surface-muted)',
-                    color: 'var(--text-soft)',
-                    border: '1px solid var(--border-subtle)',
-                  }}
-                >
-                  Deploy
-                </span>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Рендер и dry-run доступны на отдельной странице.
-                </span>
-              </>
-            )}
             {isDraftDirty && (
-              <span style={{ fontSize: '0.8rem', color: 'var(--warning)' }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--warning)', lineHeight: 1.45 }}>
                 После правок нужен новый запуск сборки.
-              </span>
+              </div>
             )}
-          </div>
-
-          <div
-            style={{
-              fontSize: '0.82rem',
-              color: Object.keys(formErrors).length > 0 ? 'var(--danger)' : 'var(--text-muted)',
-              lineHeight: 1.5,
-            }}
-          >
-            {Object.keys(formErrors).length > 0
-              ? 'Исправьте ошибки в форме, чтобы перейти к генерации Helm-чарта.'
-              : latestResultSummary}
           </div>
 
           {actionNote && (
@@ -1144,7 +1251,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
         <div ref={formCardRef} style={card}>
           <p style={sectionTitle}>Основные параметры</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <p style={sectionHint}>Базовые данные chart: проект, имя приложения, образ и сетевые порты.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
             <Grid2>
               <Field label="Проект">
                 <div>
@@ -1303,135 +1411,201 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
             </Grid2>
           </div>
         </div>
-
-        <div style={card}>
-          <p style={sectionTitle}>Тип Workload</p>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            {WORKLOAD_TYPES.map(type => (
-              <WorkloadCard key={type} type={type} selected={config.workloadType === type} onSelect={() => set('workloadType', type)} />
-            ))}
+        <div ref={advancedCardRef} style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div>
+              <p style={sectionTitle}>Продвинутые настройки</p>
+              <p style={sectionHint}>
+                Службы, ingress, ресурсы и нетиповой workload. Для быстрого старта можно оставить значения по умолчанию.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(prev => !prev)}
+              style={{
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '999px',
+                background: showAdvanced ? 'var(--surface-contrast)' : 'var(--surface-elevated)',
+                color: 'var(--text)',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                padding: '0.55rem 0.9rem',
+                cursor: 'pointer',
+              }}
+            >
+              {showAdvanced ? 'Скрыть настройки' : hasAdvancedOverrides ? 'Изменить настройки' : 'Показать настройки'}
+            </button>
           </div>
-        </div>
 
-        <div style={card}>
-          <p style={sectionTitle}>Сетевые ресурсы</p>
+          <div style={{ marginTop: '-0.1rem' }}>
+            {advancedSummary.length > 0 ? (
+              <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                {advancedSummary.map(item => (
+                  <span
+                    key={item}
+                    style={{
+                      padding: '0.28rem 0.55rem',
+                      borderRadius: '999px',
+                      background: 'var(--accent-soft)',
+                      color: 'var(--accent-contrast)',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                Используются значения по умолчанию: `Deployment`, `Service ClusterIP`, без `Ingress` и без `Resource Limits`.
+              </div>
+            )}
+          </div>
 
-          <div>
-            <ToggleSwitch checked={config.service.enabled} onChange={v => setService('enabled', v)} label="Service" />
-            {config.service.enabled && (
-              <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
-                <Field label="Порт">
-                  <div>
-                    <input
-                      style={{ ...input, width: '120px', border: formErrors.servicePort ? '1px solid var(--danger)' : input.border }}
-                      type="number"
-                      value={config.service.port}
-                      onChange={e => setService('port', Number(e.target.value))}
+          {showAdvanced && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+              <div style={{ ...nestedPanel, marginTop: 0 }}>
+                <p style={{ ...sectionTitle, marginBottom: '0.3rem' }}>Тип Workload</p>
+                <p style={{ ...sectionHint, marginBottom: '0.85rem' }}>Выбери модель запуска. Это влияет на реплики, сетевое поведение и дальнейшие рекомендации.</p>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  {WORKLOAD_TYPES.map(type => (
+                    <WorkloadCard
+                      key={type}
+                      type={type}
+                      selected={config.workloadType === type}
+                      onSelect={() => {
+                        setShowAdvanced(true)
+                        set('workloadType', type)
+                      }}
                     />
-                    {formErrors.servicePort && (
-                      <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)', maxWidth: '180px' }}>
-                        {formErrors.servicePort}
-                      </div>
-                    )}
-                  </div>
-                </Field>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabel}>Тип Service</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {SERVICE_TYPES.map(t => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setService('type', t)}
-                        style={{
-                          flex: 1,
-                          padding: '0.5rem',
-                          border: `2px solid ${config.service.type === t ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                          borderRadius: '0.5rem',
-                          background: config.service.type === t ? 'var(--accent-soft)' : 'var(--surface-elevated)',
-                          color: config.service.type === t ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                          fontWeight: 600,
-                          fontSize: '0.78rem',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               </div>
-            )}
-          </div>
 
-          <hr style={divider} />
+              <div style={{ ...nestedPanel, marginTop: 0 }}>
+                <p style={{ ...sectionTitle, marginBottom: '0.3rem' }}>Сетевые ресурсы</p>
+                <p style={{ ...sectionHint, marginBottom: '0.85rem' }}>Подключай только те сущности, которые реально нужны приложению.</p>
 
-          <div>
-            <ToggleSwitch checked={config.ingress.enabled} onChange={v => setIngress('enabled', v)} label="Ingress" />
-            {config.ingress.enabled && (
-              <div style={{ marginTop: '1rem' }}>
-                <Grid2>
-                  <Field label="Хост">
-                    <div>
-                      <input
-                        style={{ ...input, border: formErrors.ingressHost ? '1px solid var(--danger)' : input.border }}
-                        placeholder="myapp.example.com"
-                        value={config.ingress.host}
-                        onChange={e => setIngress('host', e.target.value)}
-                      />
-                      {formErrors.ingressHost && (
-                        <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
-                          {formErrors.ingressHost}
+                <div>
+                  <ToggleSwitch checked={config.service.enabled} onChange={v => setService('enabled', v)} label="Service" />
+                  {config.service.enabled && (
+                    <div style={{ ...nestedPanel, display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                      <Field label="Порт">
+                        <div>
+                          <input
+                            style={{ ...input, width: '120px', border: formErrors.servicePort ? '1px solid var(--danger)' : input.border }}
+                            type="number"
+                            value={config.service.port}
+                            onChange={e => setService('port', Number(e.target.value))}
+                          />
+                          {formErrors.servicePort && (
+                            <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)', maxWidth: '180px' }}>
+                              {formErrors.servicePort}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </Field>
-                  <Field label="Путь">
-                    <div>
-                      <input
-                        style={{ ...input, border: formErrors.ingressPath ? '1px solid var(--danger)' : input.border }}
-                        placeholder="/"
-                        value={config.ingress.path}
-                        onChange={e => setIngress('path', e.target.value)}
-                      />
-                      {formErrors.ingressPath && (
-                        <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
-                          {formErrors.ingressPath}
+                      </Field>
+                      <div style={{ flex: 1, minWidth: '240px' }}>
+                        <label style={fieldLabel}>Тип Service</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          {SERVICE_TYPES.map(t => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setService('type', t)}
+                              style={{
+                                flex: '1 1 120px',
+                                padding: '0.5rem',
+                                border: `2px solid ${config.service.type === t ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                                borderRadius: '0.5rem',
+                                background: config.service.type === t ? 'var(--accent-soft)' : 'var(--surface-elevated)',
+                                color: config.service.type === t ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                                fontWeight: 600,
+                                fontSize: '0.78rem',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {t}
+                            </button>
+                          ))}
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </Field>
-                </Grid2>
-              </div>
-            )}
-          </div>
-        </div>
+                  )}
+                </div>
 
-        <div style={card}>
-          <ToggleSwitch checked={config.resources.enabled} onChange={v => setResources('enabled', v)} label="Resource Limits" />
-          {config.resources.enabled && (
-            <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>REQUESTS</p>
-                <Grid2>
-                  <Field label="CPU">
-                    <input style={input} placeholder="100m" value={config.resources.requests.cpu} onChange={e => setResourcesNested('requests', 'cpu', e.target.value)} />
-                  </Field>
-                  <Field label="Memory">
-                    <input style={input} placeholder="128Mi" value={config.resources.requests.memory} onChange={e => setResourcesNested('requests', 'memory', e.target.value)} />
-                  </Field>
-                </Grid2>
+                <hr style={divider} />
+
+                <div>
+                  <ToggleSwitch checked={config.ingress.enabled} onChange={v => setIngress('enabled', v)} label="Ingress" />
+                  {config.ingress.enabled && (
+                    <div style={nestedPanel}>
+                      <Grid2>
+                        <Field label="Хост">
+                          <div>
+                            <input
+                              style={{ ...input, border: formErrors.ingressHost ? '1px solid var(--danger)' : input.border }}
+                              placeholder="myapp.example.com"
+                              value={config.ingress.host}
+                              onChange={e => setIngress('host', e.target.value)}
+                            />
+                            {formErrors.ingressHost && (
+                              <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                                {formErrors.ingressHost}
+                              </div>
+                            )}
+                          </div>
+                        </Field>
+                        <Field label="Путь">
+                          <div>
+                            <input
+                              style={{ ...input, border: formErrors.ingressPath ? '1px solid var(--danger)' : input.border }}
+                              placeholder="/"
+                              value={config.ingress.path}
+                              onChange={e => setIngress('path', e.target.value)}
+                            />
+                            {formErrors.ingressPath && (
+                              <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                                {formErrors.ingressPath}
+                              </div>
+                            )}
+                          </div>
+                        </Field>
+                      </Grid2>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div>
-                <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>LIMITS</p>
-                <Grid2>
-                  <Field label="CPU">
-                    <input style={input} placeholder="500m" value={config.resources.limits.cpu} onChange={e => setResourcesNested('limits', 'cpu', e.target.value)} />
-                  </Field>
-                  <Field label="Memory">
-                    <input style={input} placeholder="512Mi" value={config.resources.limits.memory} onChange={e => setResourcesNested('limits', 'memory', e.target.value)} />
-                  </Field>
-                </Grid2>
+
+              <div style={{ ...nestedPanel, marginTop: 0 }}>
+                <ToggleSwitch checked={config.resources.enabled} onChange={v => setResources('enabled', v)} label="Resource Limits" />
+                {config.resources.enabled && (
+                  <div style={{ ...nestedPanel, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div>
+                      <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>REQUESTS</p>
+                      <Grid2>
+                        <Field label="CPU">
+                          <input style={input} placeholder="100m" value={config.resources.requests.cpu} onChange={e => setResourcesNested('requests', 'cpu', e.target.value)} />
+                        </Field>
+                        <Field label="Memory">
+                          <input style={input} placeholder="128Mi" value={config.resources.requests.memory} onChange={e => setResourcesNested('requests', 'memory', e.target.value)} />
+                        </Field>
+                      </Grid2>
+                    </div>
+                    <div>
+                      <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>LIMITS</p>
+                      <Grid2>
+                        <Field label="CPU">
+                          <input style={input} placeholder="500m" value={config.resources.limits.cpu} onChange={e => setResourcesNested('limits', 'cpu', e.target.value)} />
+                        </Field>
+                        <Field label="Memory">
+                          <input style={input} placeholder="512Mi" value={config.resources.limits.memory} onChange={e => setResourcesNested('limits', 'memory', e.target.value)} />
+                        </Field>
+                      </Grid2>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1439,7 +1613,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
       </div>
 
-      <div style={{ position: 'sticky', top: '5.75rem' }}>
+      <div ref={previewPanelRef} style={{ position: 'sticky', top: '5.75rem' }}>
         <div
           style={{
             background: 'var(--surface-base)',
@@ -1491,52 +1665,12 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
 
           <div style={{ flex: 1, background: 'var(--surface-elevated)', padding: '1rem', overflow: 'auto' }}>
             {workspaceSection === 'preview' && (
-              <div>
-                <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', marginBottom: '1rem' }}>
-                  {PREVIEW_TABS.map(tab => {
-                    const disabled = isPreviewTabDisabled(tab, deferredConfig)
-                    const active = previewTab === tab
-                    return (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => !disabled && setPreviewTab(tab)}
-                        disabled={disabled}
-                        style={{
-                        padding: '0.45rem 0.7rem',
-                        fontSize: '0.74rem',
-                        border: 'none',
-                        borderRadius: '999px',
-                        background: active ? 'var(--accent-soft)' : 'var(--surface-muted)',
-                        color: disabled ? 'var(--text-muted)' : active ? 'var(--accent-contrast)' : 'var(--text-soft)',
-                        cursor: disabled ? 'not-allowed' : 'pointer',
-                        whiteSpace: 'nowrap',
-                        opacity: disabled ? 0.45 : 1,
-                      }}
-                      >
-                        {tab}
-                      </button>
-                    )
-                  })}
-                </div>
-                <pre
-                  style={{
-                    margin: 0,
-                    padding: '0.95rem 1rem',
-                    borderRadius: '0.85rem',
-                    background: 'var(--code-surface)',
-                    border: '1px solid var(--code-border)',
-                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                    fontSize: '0.78rem',
-                    lineHeight: 1.7,
-                    color: 'var(--code-text)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {previewContent}
-                </pre>
-              </div>
+              <YamlPreview
+                config={deferredConfig}
+                chartId={generatedChartId ?? undefined}
+                chartName={config.appName || 'chart'}
+                chartVersion={config.version}
+              />
             )}
 
             {workspaceSection === 'lint' && (

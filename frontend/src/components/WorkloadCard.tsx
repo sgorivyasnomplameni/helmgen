@@ -44,12 +44,12 @@ export default function WorkloadCard({ type, selected, onSelect }: Props) {
       type="button"
       onClick={onSelect}
       style={{
-        flex: 1,
+        flex: '1 1 180px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: '0.5rem',
-        padding: '1.25rem 1rem',
+        gap: '0.45rem',
+        padding: '1rem 0.9rem',
         border: `2px solid ${selected ? 'var(--accent)' : 'var(--border-subtle)'}`,
         borderRadius: '0.75rem',
         background: selected ? 'var(--accent-soft)' : 'var(--surface-base)',
@@ -63,7 +63,7 @@ export default function WorkloadCard({ type, selected, onSelect }: Props) {
       <span style={{ fontWeight: 700, fontSize: '0.9rem', color: selected ? 'var(--accent-contrast)' : 'var(--text-soft)' }}>
         {type}
       </span>
-      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+      <span style={{ fontSize: '0.71rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
         {DESCRIPTIONS[type]}
       </span>
     </button>
