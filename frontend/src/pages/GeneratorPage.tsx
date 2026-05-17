@@ -51,6 +51,7 @@ const DEFAULT_CONFIG: ChartConfig = {
 const WORKLOAD_TYPES: WorkloadType[] = ['Deployment', 'StatefulSet', 'DaemonSet']
 const SERVICE_TYPES: ServiceType[] = ['ClusterIP', 'NodePort', 'LoadBalancer']
 type WorkspaceSection = 'preview' | 'lint'
+type GeneratorStep = 'basics' | 'runtime' | 'review'
 
 interface DemoScenario {
   id: string
@@ -102,7 +103,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     title: 'Масштабируемый API',
     summary: 'Deployable-сервис с несколькими репликами, NodePort и зафиксированными ресурсами.',
     goal: 'Показывает масштабируемый HTTP/API-подобный сценарий на unprivileged-образе, который реально стартует под текущими ограничениями.',
-    expected: 'После проверки рекомендации должны быть минимальными, а deploy не должен упираться ни в безопасность, ни в недоступный image.',
+    expected: 'После проверки рекомендации должны быть минимальными, а развёртывание не должно упираться ни в безопасность, ни в недоступный image.',
     highlights: ['Deployment', '4 реплики', 'NodePort', 'Secure'],
     config: {
       appName: 'orders-api',
@@ -332,7 +333,6 @@ interface GeneratorPageProps {
 
 export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPageProps) {
   const formCardRef = useRef<HTMLDivElement | null>(null)
-  const workflowCardRef = useRef<HTMLDivElement | null>(null)
   const advancedCardRef = useRef<HTMLDivElement | null>(null)
   const scenariosRef = useRef<HTMLDivElement | null>(null)
   const { showToast } = useToast()
@@ -350,6 +350,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   const [isValidating, setIsValidating] = useState(false)
   const [, setActionNote] = useState<{ tone: 'neutral' | 'success' | 'error'; text: string } | null>(null)
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('preview')
+  const [activeGeneratorStep, setActiveGeneratorStep] = useState<GeneratorStep>('basics')
   const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false)
   const [previewWide, setPreviewWide] = useState(false)
   const [showScenarios, setShowScenarios] = useState(false)
@@ -547,6 +548,35 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     return errors
   }
 
+  function validateBasics(): FormErrors {
+    const errors = validateConfig()
+    delete errors.servicePort
+    delete errors.ingressHost
+    delete errors.ingressPath
+    return errors
+  }
+
+  function blockUntilBasicsReady(): boolean {
+    const errors = validateBasics()
+    if (Object.keys(errors).length === 0) {
+      return false
+    }
+
+    setFormErrors(errors)
+    setActiveGeneratorStep('basics')
+    formCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    showToast('Сначала заполните обязательные параметры chart', 'error')
+    return true
+  }
+
+  function goToGeneratorStep(step: GeneratorStep) {
+    if (step !== 'basics' && blockUntilBasicsReady()) {
+      return
+    }
+
+    setActiveGeneratorStep(step)
+  }
+
   async function handleCreateProject() {
     const trimmedName = newProjectName.trim()
     if (!trimmedName) {
@@ -590,26 +620,11 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     void chartsApi.download(generatedChartId, `${config.appName}-${config.version}.tgz`)
   }
 
-  function handleSaveTemplate() {
-    window.localStorage.setItem(
-      'helmgen-saved-template',
-      JSON.stringify({
-        selectedProjectId,
-        config,
-        savedAt: Date.now(),
-      }),
-    )
-    setActionNote({
-      tone: 'success',
-      text: 'Шаблон сохранён локально в браузере. Его можно использовать как черновик для следующей сессии.',
-    })
-    showToast('Шаблон сохранён локально', 'success')
-  }
-
   async function handleGenerate() {
     const errors = validateConfig()
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors)
+      setActiveGeneratorStep('basics')
       showToast('Исправьте ошибки в форме перед генерацией', 'error')
       return
     }
@@ -637,6 +652,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       setIsDraftDirty(false)
       onChartReady?.(generatedChart.id)
       setStatus('success')
+      setActiveGeneratorStep('review')
       setActionNote({ tone: 'success', text: `Чарт ${generatedChart.name} успешно собран. Теперь его можно проверить или скачать.` })
       showToast(`Чарт ${generatedChart.name} собран`, 'success')
     } catch (error) {
@@ -684,13 +700,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     }
   }
 
-  const configLooksReady = Boolean(
-    config.appName.trim()
-      && config.version.trim()
-      && config.image.trim()
-      && config.imageTag.trim()
-      && Object.keys(validateConfig()).length === 0,
-  )
+  const basicsLooksReady = Object.keys(validateBasics()).length === 0
   const canUseBuiltArtifact = Boolean(generatedChartId && !isDraftDirty)
   const hasAdvancedOverrides =
     config.workloadType !== DEFAULT_CONFIG.workloadType
@@ -736,7 +746,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     ...(canUseBuiltArtifact && onOpenOps
       ? [{
           key: 'ops',
-          label: 'Проверка и deploy',
+          label: validation?.valid ? 'Открыть развёртывание' : 'Открыть pipeline',
           onClick: onOpenOps,
           disabled: !canUseBuiltArtifact,
           tone: 'neutral' as const,
@@ -763,7 +773,15 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     }
   }
 
-  if (canUseBuiltArtifact && validation?.valid) {
+  if (canUseBuiltArtifact && validation?.valid && onOpenOps) {
+    primaryAction = {
+      key: 'ops',
+      label: 'Открыть развёртывание',
+      onClick: onOpenOps,
+      disabled: !canUseBuiltArtifact,
+      loading: false,
+    }
+  } else if (canUseBuiltArtifact && validation?.valid) {
     primaryAction = {
       key: 'download',
       label: 'Скачать',
@@ -799,50 +817,6 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   })
   const primaryToolbarAction = toolbarActions.find(action => action.primary) ?? toolbarActions[0]
   const secondaryToolbarActions = toolbarActions.filter(action => !action.primary)
-  const workspaceSummary = Object.keys(formErrors).length > 0
-    ? 'Исправьте ошибки формы.'
-    : isDraftDirty
-      ? 'Конфигурация изменилась. Обновите chart.'
-      : validation?.valid
-        ? 'Проверка пройдена. Можно переходить к deploy.'
-        : generatedChartId
-          ? 'Чарт собран. Следующий шаг: проверка.'
-          : 'Заполните форму и соберите chart.'
-  const progressItems = [
-    {
-      key: 'config',
-      label: 'Форма',
-      state: configLooksReady ? 'Готово' : 'Заполнить',
-      done: configLooksReady,
-      active: !configLooksReady,
-      disabled: false,
-      onClick: () => formCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
-    },
-    {
-      key: 'chart',
-      label: 'Чарт',
-      state: isDraftDirty ? 'Обновить' : generatedChartId ? 'Создан' : 'Собрать',
-      done: Boolean(generatedChartId && !isDraftDirty),
-      active: Boolean((configLooksReady && !generatedChartId) || isDraftDirty),
-      disabled: false,
-      onClick: () => {
-        setWorkspaceSection('preview')
-        setPreviewDrawerOpen(true)
-      },
-    },
-    {
-      key: 'lint',
-      label: 'Проверка',
-      state: validation?.valid ? 'Пройдена' : 'Ожидает',
-      done: Boolean(validation?.valid),
-      active: Boolean(canUseBuiltArtifact && !validation?.valid),
-      disabled: !canUseBuiltArtifact,
-      onClick: () => {
-        setWorkspaceSection('lint')
-        setPreviewDrawerOpen(true)
-      },
-    },
-  ]
   const selectedScenario =
     DEMO_SCENARIOS.find(
       scenario =>
@@ -866,218 +840,283 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     config.security.containerSecurityContext.privileged ? 'Привилегированный режим' : 'Без привилегий',
     config.security.hostNetwork ? 'Сеть хоста' : 'Сеть Pod',
   ]
+  const readinessIssues = [
+    !config.appName.trim() ? { severity: 'critical' as const, label: 'Не указано имя приложения' } : null,
+    !selectedProjectId ? { severity: 'critical' as const, label: 'Не выбран проект' } : null,
+    config.imageTag === 'latest' ? { severity: 'warning' as const, label: 'Image tag latest усложняет воспроизводимость' } : null,
+    config.workloadType === 'Deployment' && config.replicas < 2 ? { severity: 'warning' as const, label: 'Для Deployment лучше минимум 2 реплики' } : null,
+    !config.resources.enabled ? { severity: 'warning' as const, label: 'Requests/limits не заданы' } : null,
+    config.ingress.enabled && !config.service.enabled ? { severity: 'critical' as const, label: 'Ingress включён без Service' } : null,
+    config.security.hostNetwork ? { severity: 'critical' as const, label: 'hostNetwork повышает риск изоляции' } : null,
+    config.security.containerSecurityContext.privileged ? { severity: 'critical' as const, label: 'Privileged container не подходит для обычного сервиса' } : null,
+    config.security.containerSecurityContext.allowPrivilegeEscalation ? { severity: 'warning' as const, label: 'Разрешена privilege escalation' } : null,
+    !config.security.containerSecurityContext.capabilitiesDropAll ? { severity: 'warning' as const, label: 'Linux capabilities не сбрасываются' } : null,
+    !config.security.podSecurityContext.runAsNonRoot ? { severity: 'warning' as const, label: 'runAsNonRoot выключен' } : null,
+  ].filter(Boolean) as Array<{ severity: 'critical' | 'warning'; label: string }>
+  const criticalReadinessCount = readinessIssues.filter(issue => issue.severity === 'critical').length
+  const warningReadinessCount = readinessIssues.filter(issue => issue.severity === 'warning').length
+  const readinessScore = Math.max(0, 100 - criticalReadinessCount * 25 - warningReadinessCount * 10)
+  const readinessTone =
+    readinessScore >= 85 ? 'success' : readinessScore >= 65 && criticalReadinessCount === 0 ? 'warning' : 'danger'
+  const readinessTitle =
+    readinessScore >= 85
+      ? 'Production-ready профиль'
+      : criticalReadinessCount > 0
+        ? 'Есть блокирующие риски'
+        : 'Можно собрать, но лучше доработать'
+  const readinessSummary =
+    readinessIssues.length === 0
+      ? 'Конфигурация выглядит устойчиво: есть базовая безопасность, воспроизводимый image tag и понятный runtime-профиль.'
+      : readinessIssues.slice(0, 2).map(issue => issue.label).join('. ')
+  const plannedResources = [
+    {
+      key: 'workload',
+      title: config.workloadType,
+      detail: config.workloadType === 'DaemonSet'
+        ? `Pod на каждой ноде, порт контейнера ${config.containerPort}`
+        : `${config.replicas} pod${config.replicas === 1 ? '' : 's'}, порт контейнера ${config.containerPort}`,
+      tone: 'accent' as const,
+    },
+    config.service.enabled
+      ? {
+          key: 'service',
+          title: `Service ${config.service.type}`,
+          detail: `Откроет порт ${config.service.port} внутри кластера`,
+          tone: config.service.type === 'LoadBalancer' ? ('warning' as const) : ('neutral' as const),
+        }
+      : {
+          key: 'service',
+          title: 'Service не создаётся',
+          detail: config.ingress.enabled ? 'Ingress без Service не сможет маршрутизировать трафик' : 'Workload останется без сетевой точки входа',
+          tone: config.ingress.enabled ? ('danger' as const) : ('neutral' as const),
+        },
+    config.ingress.enabled
+      ? {
+          key: 'ingress',
+          title: 'Ingress',
+          detail: `${config.ingress.host}${config.ingress.path}`,
+          tone: config.service.enabled ? ('accent' as const) : ('danger' as const),
+        }
+      : {
+          key: 'ingress',
+          title: 'Ingress не создаётся',
+          detail: 'Внешний HTTP-вход выключен',
+          tone: 'neutral' as const,
+        },
+    {
+      key: 'resources',
+      title: config.resources.enabled ? 'Resources заданы' : 'Resources не заданы',
+      detail: config.resources.enabled
+        ? `requests ${config.resources.requests.cpu}/${config.resources.requests.memory}, limits ${config.resources.limits.cpu}/${config.resources.limits.memory}`
+        : 'Kubernetes scheduler не получит явных requests/limits',
+      tone: config.resources.enabled ? ('success' as const) : ('warning' as const),
+    },
+    {
+      key: 'security',
+      title: config.security.containerSecurityContext.privileged || config.security.hostNetwork ? 'Security требует внимания' : 'Security baseline',
+      detail: securitySummary.join(', '),
+      tone: config.security.containerSecurityContext.privileged || config.security.hostNetwork ? ('danger' as const) : ('success' as const),
+    },
+  ]
+  const generatorSteps: Array<{
+    key: GeneratorStep
+    label: string
+    summary: string
+    state: string
+    done: boolean
+    attention: boolean
+  }> = [
+    {
+      key: 'basics',
+      label: 'Базовые параметры',
+      summary: 'Проект, имя chart, image и порт контейнера.',
+      state: basicsLooksReady ? 'Готово' : 'Заполнить',
+      done: basicsLooksReady,
+      attention: Object.keys(formErrors).length > 0,
+    },
+    {
+      key: 'runtime',
+      label: 'Runtime / Network / Security',
+      summary: 'Workload, Service, Ingress, resources и security профиль.',
+      state: hasAdvancedOverrides ? 'Настроено' : 'По умолчанию',
+      done: true,
+      attention: false,
+    },
+    {
+      key: 'review',
+      label: 'Review chart',
+      summary: 'Сборка artifact, YAML preview, lint и понятный итог перед развёртыванием.',
+      state: validation?.valid ? 'Проверено' : generatedChartId && !isDraftDirty ? 'Собрано' : 'Собрать',
+      done: Boolean(validation?.valid),
+      attention: Boolean(isDraftDirty || validation?.valid === false),
+    },
+  ]
+  const currentGeneratorStep = generatorSteps.find(step => step.key === activeGeneratorStep) ?? generatorSteps[0]
+  const previousGeneratorStep: GeneratorStep | null =
+    activeGeneratorStep === 'review' ? 'runtime' : activeGeneratorStep === 'runtime' ? 'basics' : null
+  const nextGeneratorStep: GeneratorStep | null =
+    activeGeneratorStep === 'basics' ? 'runtime' : activeGeneratorStep === 'runtime' ? 'review' : null
+  const nextActionLabel =
+    activeGeneratorStep === 'basics' && !basicsLooksReady
+      ? 'Проверить и продолжить'
+      : 'Далее'
 
   return (
     <>
     <div className="generator-shell">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div
-          ref={scenariosRef}
-          style={{
-            ...card,
-            padding: '0.8rem 0.95rem',
-            border: '1px solid var(--border-subtle)',
-            background: 'var(--surface-base)',
-            position: 'relative',
-            overflow: 'visible',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.9rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0, flex: '1 1 420px' }}>
-              <div style={{ fontSize: '0.73rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Быстрый старт
-              </div>
-              <div style={{ marginTop: '0.18rem', fontSize: '0.92rem', fontWeight: 800, color: 'var(--text)' }}>
-                {selectedScenario ? selectedScenario.title : 'Чистая конфигурация'}
-              </div>
-              <div style={{ marginTop: '0.16rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                {selectedScenario ? selectedScenario.summary : 'Начни с пустой формы или быстро примени готовый сценарий.'}
-              </div>
-              <div style={{ marginTop: '0.3rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                {(selectedScenario ? selectedScenario.highlights : ['Без пресета', 'Ручная настройка']).slice(0, 3).map(item => (
-                  <span
-                    key={item}
-                    style={{
-                      padding: '0.22rem 0.45rem',
-                      borderRadius: '999px',
-                      background: 'var(--surface-elevated)',
-                      color: 'var(--text-soft)',
-                      fontSize: '0.68rem',
-                      fontWeight: 700,
-                      border: '1px solid var(--border-subtle)',
-                    }}
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
+        <div ref={scenariosRef} className="template-starter">
+          <div className="template-starter__current">
+            <div className="eyebrow">Template</div>
+            <div className="template-starter__title">
+              {selectedScenario ? selectedScenario.title : 'Начать с чистой конфигурации'}
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <Button
-                type="button"
-                tone="secondary"
-                size="sm"
-                onClick={() => {
-                  resetGenerationState()
-                  setConfig(DEFAULT_CONFIG)
-                }}
-              >
-                Сбросить
-              </Button>
-              <Button type="button" tone="secondary" size="sm" onClick={() => setShowScenarios(prev => !prev)} style={{ boxShadow: 'none' }}>
-                {showScenarios ? 'Закрыть' : 'Выбрать сценарий'}
-              </Button>
+            <div className="template-starter__summary">
+              {selectedScenario ? selectedScenario.summary : 'Выберите сценарий ниже или заполните параметры вручную.'}
+            </div>
+            <div className="chip-row">
+              {(selectedScenario ? selectedScenario.highlights : ['Manual', 'No preset']).slice(0, 4).map(item => (
+                <span key={item} className="template-starter__chip">{item}</span>
+              ))}
             </div>
           </div>
 
-          <div
-            style={{
-              position: 'absolute',
-              top: 'calc(100% + 0.55rem)',
-              right: '0.95rem',
-              width: 'min(760px, calc(100vw - 4rem))',
-              padding: showScenarios ? '0.8rem' : '0',
-              borderRadius: '1rem',
-              border: showScenarios ? '1px solid var(--border-subtle)' : '1px solid transparent',
-              background: 'var(--surface-base)',
-              boxShadow: showScenarios ? 'var(--shadow-soft)' : 'none',
-              display: 'grid',
-              gap: '0.65rem',
-              maxHeight: showScenarios ? '520px' : '0',
-              opacity: showScenarios ? 1 : 0,
-              overflow: 'hidden',
-              pointerEvents: showScenarios ? 'auto' : 'none',
-              transform: showScenarios ? 'translateY(0)' : 'translateY(-6px)',
-              transition: 'max-height 0.28s ease, opacity 0.22s ease, transform 0.22s ease, padding 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease',
-              zIndex: 20,
-            }}
-          >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', paddingBottom: '0.2rem' }}>
-                <div>
-                  <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text)' }}>Стартовые сценарии</div>
-                  <div style={{ marginTop: '0.15rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Примени готовую конфигурацию и доработай её в форме.
-                  </div>
-                </div>
-                <Button type="button" tone="secondary" size="sm" onClick={() => setShowScenarios(false)} style={{ boxShadow: 'none' }}>
-                  Закрыть
-                </Button>
-              </div>
+          <div className="template-starter__choices">
+            {DEMO_SCENARIOS.slice(0, 3).map(scenario => {
+              const selected =
+                config.appName === scenario.config.appName &&
+                config.workloadType === scenario.config.workloadType &&
+                config.imageTag === scenario.config.imageTag
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.55rem' }}>
-                {DEMO_SCENARIOS.map(scenario => {
-                  const selected =
-                    config.appName === scenario.config.appName &&
-                    config.workloadType === scenario.config.workloadType &&
-                    config.imageTag === scenario.config.imageTag
+              return (
+                <button
+                  key={scenario.id}
+                  type="button"
+                  className={selected ? 'template-choice is-selected' : 'template-choice'}
+                  onClick={() => applyScenario(scenario)}
+                >
+                  <span className="template-choice__title">{scenario.title}</span>
+                  <span className="template-choice__meta">{scenario.highlights.slice(0, 2).join(' / ')}</span>
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              className={showScenarios ? 'template-choice template-choice--more is-selected' : 'template-choice template-choice--more'}
+              onClick={() => setShowScenarios(prev => !prev)}
+            >
+              <span className="template-choice__title">{showScenarios ? 'Скрыть все' : 'Все шаблоны'}</span>
+              <span className="template-choice__meta">ещё {Math.max(0, DEMO_SCENARIOS.length - 3)}</span>
+            </button>
+          </div>
 
-                  return (
-                    <button
-                      key={scenario.id}
-                      type="button"
-                      onClick={() => applyScenario(scenario)}
-                      style={{
-                        textAlign: 'left',
-                        border: `1px solid ${selected ? 'color-mix(in srgb, var(--accent) 45%, var(--border-subtle) 55%)' : 'var(--border-subtle)'}`,
-                        background: selected ? 'color-mix(in srgb, var(--accent-soft) 48%, var(--surface-elevated) 52%)' : 'var(--surface-elevated)',
-                        borderRadius: '0.8rem',
-                        padding: '0.75rem 0.8rem',
-                        cursor: 'pointer',
-                        display: 'grid',
-                        gap: '0.4rem',
-                        transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text)' }}>{scenario.title}</div>
-                        <div style={{ marginTop: '0.18rem', fontSize: '0.74rem', lineHeight: 1.4, color: 'var(--text-muted)' }}>
-                          {scenario.summary}
-                        </div>
-                      </div>
+          <div className="template-starter__actions">
+            <Button
+              type="button"
+              tone="secondary"
+              size="sm"
+              onClick={() => {
+                resetGenerationState()
+                setConfig(DEFAULT_CONFIG)
+                setShowScenarios(false)
+              }}
+            >
+              Чистый старт
+            </Button>
+          </div>
 
-                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignSelf: 'end' }}>
-                        {scenario.highlights.slice(0, 3).map(item => (
-                          <span
-                            key={item}
-                            style={{
-                              padding: '0.26rem 0.48rem',
-                              borderRadius: '999px',
-                              background: 'var(--surface-contrast)',
-                              color: 'var(--text-soft)',
-                              fontSize: '0.68rem',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {item}
-                          </span>
-                        ))}
-                        {scenario.highlights.length > 3 && (
-                          <span
-                            style={{
-                              padding: '0.26rem 0.48rem',
-                              borderRadius: '999px',
-                              background: 'var(--surface-muted)',
-                              color: 'var(--text-muted)',
-                              fontSize: '0.68rem',
-                              fontWeight: 700,
-                            }}
-                          >
-                            +{scenario.highlights.length - 3}
-                          </span>
-                        )}
-                      </div>
+          {showScenarios && (
+            <div className="template-starter__all">
+              {DEMO_SCENARIOS.slice(3).map(scenario => {
+                const selected =
+                  config.appName === scenario.config.appName &&
+                  config.workloadType === scenario.config.workloadType &&
+                  config.imageTag === scenario.config.imageTag
 
-                      <div style={{ fontSize: '0.73rem', color: 'var(--accent-contrast)', fontWeight: 700 }}>
-                        Применить
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
+                return (
+                  <button
+                    key={scenario.id}
+                    type="button"
+                    className={selected ? 'template-card is-selected' : 'template-card'}
+                    onClick={() => applyScenario(scenario)}
+                  >
+                    <span className="template-card__title">{scenario.title}</span>
+                    <span className="template-card__summary">{scenario.summary}</span>
+                    <span className="chip-row">
+                      {scenario.highlights.slice(0, 3).map(item => (
+                        <span key={item} className="template-starter__chip">{item}</span>
+                      ))}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={{ ...card, padding: '0.85rem 0.95rem' }}>
+          <div className="generator-stepper" aria-label="Шаги генерации Helm chart">
+            {generatorSteps.map((step, index) => {
+              const active = activeGeneratorStep === step.key
+              return (
+                <button
+                  key={step.key}
+                  type="button"
+                  className={[
+                    'generator-stepper__item',
+                    active ? 'is-active' : '',
+                    step.done ? 'is-done' : '',
+                    step.attention ? 'has-attention' : '',
+                  ].filter(Boolean).join(' ')}
+                  onClick={() => goToGeneratorStep(step.key)}
+                >
+                  <span className="generator-stepper__index">{step.done ? '✓' : index + 1}</span>
+                  <span className="generator-stepper__content">
+                    <span className="generator-stepper__label">{step.label}</span>
+                    <span className="generator-stepper__summary">{step.summary}</span>
+                    <span className="generator-stepper__state">{step.state}</span>
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        <div
-          ref={workflowCardRef}
-          style={{
-            ...card,
-            padding: '0.9rem 0.95rem',
-            display: 'grid',
-            gap: '0.75rem',
-            background: 'var(--surface-base)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Рабочая область
+        <div className="generator-flow-toolbar">
+          <div className="generator-flow-toolbar__status">
+            <div className="eyebrow">Текущий шаг</div>
+            <div className="generator-flow-toolbar__title">{currentGeneratorStep.label}</div>
+            <div className="generator-flow-toolbar__summary">{currentGeneratorStep.summary}</div>
+            {activeGeneratorStep === 'basics' && !basicsLooksReady && (
+              <div className="generator-flow-toolbar__hint">
+                Нужно выбрать проект и заполнить app name, image, tag и порт.
               </div>
-              <div style={{ marginTop: '0.18rem', fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Поток работы</div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+            )}
+          </div>
+          <div className="generator-flow-toolbar__actions">
+            {previousGeneratorStep && (
               <Button
                 type="button"
                 tone="secondary"
-                size="sm"
-                onClick={() => {
-                  resetGenerationState()
-                  setFormErrors({})
-                  setShowAdvanced(false)
-                  setConfig(DEFAULT_CONFIG)
-                }}
+                onClick={() => goToGeneratorStep(previousGeneratorStep)}
               >
-                Сбросить
+                Назад
               </Button>
-              <Button type="button" tone="secondary" size="sm" onClick={handleSaveTemplate}>
-                Сохранить шаблон
+            )}
+            {nextGeneratorStep ? (
+              <Button
+                type="button"
+                tone="primary"
+                onClick={() => goToGeneratorStep(nextGeneratorStep)}
+              >
+                {nextActionLabel}
               </Button>
+            ) : (
               <Button
                 type="button"
                 tone={primaryToolbarAction.tone === 'success' ? 'success' : 'primary'}
-                size="sm"
                 onClick={primaryToolbarAction.onClick}
                 disabled={primaryToolbarAction.disabled}
-                style={{ borderRadius: '999px' }}
               >
                 {primaryToolbarAction.key === 'generate'
                   ? (isDraftDirty ? 'Обновить chart' : 'Собрать chart')
@@ -1085,105 +1124,25 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                     ? 'Проверить chart'
                     : primaryToolbarAction.label}
               </Button>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ ...stepChipBase, background: Object.keys(formErrors).length > 0 ? 'var(--danger-soft)' : isDraftDirty ? 'var(--warning-soft)' : validation?.valid ? 'var(--success-soft)' : 'var(--surface-muted)', color: Object.keys(formErrors).length > 0 ? 'var(--danger)' : isDraftDirty ? 'var(--warning)' : validation?.valid ? 'var(--success)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
-              {workspaceSummary}
-            </span>
-            {generatedChartId && (
-              <span style={{ ...stepChipBase, background: 'var(--surface-elevated)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
-                ID chart #{generatedChartId}
-              </span>
             )}
-          </div>
-
-          <div className="workflow-steps">
-            {progressItems.map(item => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={item.onClick}
-                disabled={item.disabled}
-                style={{
-                  padding: '0.72rem 0.78rem',
-                  borderRadius: '0.85rem',
-                  border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 30%, var(--border-subtle) 70%)' : item.active ? 'color-mix(in srgb, var(--accent) 30%, var(--border-subtle) 70%)' : 'var(--border-subtle)'}`,
-                  background: item.done ? 'color-mix(in srgb, var(--success-soft) 55%, var(--surface-elevated) 45%)' : item.active ? 'var(--surface-elevated)' : 'var(--surface-base)',
-                  cursor: item.disabled ? 'not-allowed' : 'pointer',
-                  opacity: item.disabled ? 0.55 : 1,
-                  textAlign: 'left',
-                  boxShadow: item.active ? 'var(--shadow)' : 'none',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <span
-                    style={{
-                      width: '1.8rem',
-                      height: '1.8rem',
-                      borderRadius: '999px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: item.done ? 'var(--success-soft)' : item.active ? 'var(--accent-soft)' : 'var(--surface-muted)',
-                      color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)',
-                      border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 30%, transparent)' : item.active ? 'color-mix(in srgb, var(--accent) 30%, transparent)' : 'var(--border-subtle)'}`,
-                      fontSize: '0.76rem',
-                      fontWeight: 800,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {item.done ? '✓' : item.key === 'config' ? '1' : item.key === 'chart' ? '2' : '3'}
-                  </span>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text)' }}>{item.label}</span>
-                </div>
-                <div style={{ marginTop: '0.32rem', fontSize: '0.73rem', color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)' }}>
-                  {item.state}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', flexWrap: 'wrap', alignItems: 'center', paddingTop: '0.2rem', borderTop: '1px solid var(--border-subtle)' }}>
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', minWidth: 0 }}>
-              <span style={{ ...stepChipBase, background: generatedChartId ? 'var(--success-soft)' : 'var(--surface-muted)', color: generatedChartId ? 'var(--success)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
-                {generatedChartId ? 'Манифест готов' : 'Манифест ещё не собран'}
-              </span>
-              <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
-                {validation ? (validation.valid ? 'Проверка пройдена' : 'Проверка с ошибками') : 'Проверка не запускалась'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {activeGeneratorStep === 'review' && secondaryToolbarActions.map(action => (
               <Button
+                key={action.key}
                 type="button"
-                tone="secondary"
+                tone={action.tone === 'success' ? 'success' : 'secondary'}
                 size="sm"
-                onClick={() => {
-                  setWorkspaceSection('preview')
-                  setPreviewDrawerOpen(true)
-                }}
+                onClick={action.onClick}
+                disabled={action.disabled}
               >
-                Смотреть манифест
+                {action.label}
               </Button>
-              {secondaryToolbarActions.slice(0, 1).map(action => (
-                <Button
-                  key={action.key}
-                  type="button"
-                  tone={action.tone === 'success' ? 'success' : 'secondary'}
-                  size="sm"
-                  onClick={action.onClick}
-                  disabled={action.disabled}
-                >
-                  {action.label}
-                </Button>
-              ))}
-            </div>
+            ))}
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 760px', display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '0' }}>
+            {activeGeneratorStep === 'basics' && (
             <div ref={formCardRef} style={card}>
               <p style={sectionTitle}>Основные параметры</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
@@ -1352,7 +1311,9 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                 </div>
               </div>
             </div>
+            )}
 
+            {activeGeneratorStep === 'runtime' && (
             <div ref={advancedCardRef} style={card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div>
@@ -1535,7 +1496,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       Режим
                     </div>
                     <p style={{ ...sectionTitle, marginBottom: '0.1rem' }}>Ресурсы</p>
-                    <p style={{ ...sectionHint, marginBottom: 0 }}>Requests и limits помогают сделать workload предсказуемым при проверке и deploy.</p>
+                    <p style={{ ...sectionHint, marginBottom: 0 }}>Requests и limits помогают сделать workload предсказуемым при проверке и развёртывании.</p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                     {resourcesSummary.map(item => (
@@ -1598,6 +1559,99 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
             </div>
           )}
         </div>
+            )}
+
+            {activeGeneratorStep === 'review' && (
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div className="review-outcome">
+                  <div className="review-outcome__status">
+                    <div>
+                      <div className="eyebrow">{validation ? 'Lint result' : 'Готово к проверке'}</div>
+                      <div className="section-title">{validation ? 'Результат проверки' : 'Проверь chart перед развёртыванием'}</div>
+                    </div>
+                    <span style={{
+                      ...stepChipBase,
+                      background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)',
+                      color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)',
+                      border: '1px solid var(--border-subtle)',
+                    }}>
+                      {validation ? (validation.valid ? 'Прошло' : 'Есть ошибки') : 'Ожидает'}
+                    </span>
+                  </div>
+                  <div className="review-outcome__summary">
+                    {validation?.summary || 'Запустите проверку, чтобы увидеть итог helm lint и перейти к безопасному pipeline развёртывания.'}
+                  </div>
+
+                  {validation?.valid && onOpenOps && (
+                    <div className="deploy-handoff deploy-handoff--compact">
+                      <div>
+                        <div className="eyebrow">Следующий этап</div>
+                        <div className="deploy-handoff__title">Chart готов к развёртыванию</div>
+                        <div className="deploy-handoff__summary">
+                          Дальше pipeline проведёт chart через render, dry-run и реальное развёртывание в Kubernetes.
+                        </div>
+                      </div>
+                      <div className="deploy-handoff__steps">
+                        <span>1. Render</span>
+                        <span>2. Dry-run</span>
+                        <span>3. Deploy</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="readiness-panel">
+                  <div className={`readiness-score readiness-score--${readinessTone}`}>
+                    <span className="readiness-score__value">{readinessScore}</span>
+                    <span className="readiness-score__label">/100</span>
+                  </div>
+                  <div className="readiness-panel__body">
+                    <div className="eyebrow">Production readiness</div>
+                    <div className="readiness-panel__title">{readinessTitle}</div>
+                    <div className="readiness-panel__summary">{readinessSummary}</div>
+                    {readinessIssues.length > 0 && (
+                      <div className="readiness-issues">
+                        {readinessIssues.slice(0, 4).map(issue => (
+                          <span key={issue.label} className={`readiness-issue readiness-issue--${issue.severity}`}>
+                            {issue.label}
+                          </span>
+                        ))}
+                        {readinessIssues.length > 4 && (
+                          <span className="readiness-issue readiness-issue--more">
+                            +{readinessIssues.length - 4}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="manifest-plan">
+                  <div className="manifest-plan__header">
+                    <div>
+                      <div className="eyebrow">Что будет создано</div>
+                      <div className="section-title">План Kubernetes-ресурсов</div>
+                    </div>
+                    <span className="manifest-plan__count">{plannedResources.length} блоков</span>
+                  </div>
+                  <div className="manifest-plan__grid">
+                    {plannedResources.map(resource => (
+                      <div key={resource.key} className={`manifest-resource manifest-resource--${resource.tone}`}>
+                        <div className="manifest-resource__title">{resource.title}</div>
+                        <div className="manifest-resource__detail">{resource.detail}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <YamlPreview
+                  config={deferredConfig}
+                  chartId={generatedChartId ?? undefined}
+                  chartName={config.appName || 'chart'}
+                  chartVersion={config.version}
+                />
+              </div>
+            )}
           </div>
           <aside
             style={{

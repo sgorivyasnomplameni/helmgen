@@ -80,7 +80,7 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion, 
               Предпросмотр манифеста
             </div>
             <div className="section-copy">
-              Только просмотр YAML и результатов проверки перед deploy.
+              Только просмотр YAML и результатов проверки перед развёртыванием.
             </div>
             {drawerMode && (
               <div className="chip-row">

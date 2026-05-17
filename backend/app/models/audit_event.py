@@ -11,7 +11,7 @@ class AuditEvent(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
-    chart_id: Mapped[int | None] = mapped_column(ForeignKey("charts.id"), nullable=True, index=True)
+    chart_id: Mapped[int | None] = mapped_column(ForeignKey("charts.id", ondelete="SET NULL"), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False, default="chart")
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="success")

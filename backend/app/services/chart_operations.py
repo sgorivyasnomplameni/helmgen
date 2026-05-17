@@ -3,8 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.audit_event import AuditEvent
 from app.models.chart import Chart
 from app.models.project import Project
 from app.models.user import User
@@ -120,13 +122,20 @@ class ChartOperationsService:
 
     async def delete_chart(self, chart_id: int) -> None:
         chart = await self.get_owned_chart(chart_id)
+        chart_name = chart.name
         log_audit_event(
             self.db,
             action="chart.delete",
             status="success",
-            summary=f"Удалён chart {chart.name}.",
+            summary=f"Удалён chart {chart_name}.",
             user=self.current_user,
             chart=chart,
+        )
+        await self.db.flush()
+        await self.db.execute(
+            update(AuditEvent)
+            .where(AuditEvent.chart_id == chart.id)
+            .values(chart_id=None)
         )
         await self.db.delete(chart)
 

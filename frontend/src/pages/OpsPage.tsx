@@ -122,7 +122,7 @@ function summarizeDryRunError(errors: string[]): string | null {
 function summarizeClusterError(errors: string[]): string | null {
   const clusterError = errors.find(error => error.includes('Kubernetes'))
   if (clusterError) {
-    return 'Backend не может подключиться к Kubernetes API. Реальный deploy-контур сейчас недоступен, но template и client-side dry-run всё ещё можно использовать.'
+    return 'Backend не может подключиться к Kubernetes API. Контур развёртывания сейчас недоступен, но template и client-side dry-run всё ещё можно использовать.'
   }
 
   return errors[0] ?? null
@@ -201,8 +201,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
   const [operationNow, setOperationNow] = useState(Date.now())
   const [namespace, setNamespace] = useState('helmgen-demo')
   const [releaseName, setReleaseName] = useState('')
-  const [deployConfirmed, setDeployConfirmed] = useState(false)
   const [rollbackConfirmed, setRollbackConfirmed] = useState(false)
+  const [uninstallConfirmed, setUninstallConfirmed] = useState(false)
   const [rollbackRevision, setRollbackRevision] = useState('')
   const [clusterStatus, setClusterStatus] = useState<ClusterStatusResult | null>(null)
   const [isLoadingClusterStatus, setIsLoadingClusterStatus] = useState(false)
@@ -261,8 +261,8 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
     setCurrentOperation(null)
     setLastOperation(null)
     setAuditEvents([])
-    setDeployConfirmed(false)
     setRollbackConfirmed(false)
+    setUninstallConfirmed(false)
     setRollbackRevision('')
     setTab('template')
   }, [activeChartId])
@@ -362,18 +362,17 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
   const isCheckingReleaseStatus = activeOperation === 'release-status'
   const isUninstalling = activeOperation === 'uninstall'
   const canDryRun = !isDryRunning
-  const canDeploy = clusterReady && deployConfirmed && !isDeploying
   const templateReady = Boolean(templateResult?.success)
   const dryRunReady = Boolean(dryRunResult?.success)
+  const canDeploy = clusterReady && dryRunReady && !isDeploying
   const deploySucceeded = Boolean(deployResult?.success)
-  const showDeployConfirmation = !deploySucceeded && (dryRunReady || tab === 'deploy')
   const showRollbackControls = tab === 'rollback'
   const showAdvancedOperations = deploySucceeded || Boolean(releaseStatusResult || monitoringResult || releaseHistoryResult || rollbackResult || uninstallResult)
   const visibleTabs: Array<[OpsTab, string]> = deploySucceeded
     ? [
         ['template', 'Рендер'],
         ['dry-run', 'Dry-run'],
-        ['deploy', 'Deploy'],
+        ['deploy', 'Развёртывание'],
         ['monitoring', 'Мониторинг'],
         ['rollback', 'Rollback'],
         ['uninstall', 'Удаление'],
@@ -381,7 +380,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
     : [
         ['template', 'Рендер'],
         ['dry-run', 'Dry-run'],
-        ['deploy', 'Deploy'],
+        ['deploy', 'Развёртывание'],
       ]
 
   const primaryFlowAction =
@@ -406,7 +405,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
         : !deploySucceeded
           ? clusterReady
             ? {
-                title: 'Шаг 3. Выполнить deploy',
+                title: 'Шаг 3. Развернуть release',
                 description: 'Кластер доступен. Подтверди реальное развёртывание и запускай helm upgrade --install.',
                 label: isDeploying ? 'Развёртывание...' : 'Развернуть release',
                 onClick: () => void handleDeploy(),
@@ -415,14 +414,14 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               }
             : {
                 title: 'Шаг 3. Подготовить Kubernetes',
-                description: 'Chart уже прошёл render и dry-run, но backend пока не видит рабочий Kubernetes context для реального deploy.',
+                description: 'Chart уже прошёл render и dry-run, но backend пока не видит рабочий Kubernetes context для реального развёртывания.',
                 label: isLoadingClusterStatus ? 'Проверяем...' : 'Проверить Kubernetes',
                 onClick: () => void refreshClusterStatus(),
                 disabled: isLoadingClusterStatus,
                 tone: 'warning' as const,
-              }
+            }
           : {
-              title: 'Deploy завершён',
+              title: 'Release развернут',
               description: 'Release уже развернут. Теперь можно посмотреть статус, мониторинг, историю Helm или выполнить откат.',
               label: isMonitoring ? 'Собираем...' : 'Открыть мониторинг',
               onClick: () => void handleMonitoring(),
@@ -446,6 +445,14 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               background: 'var(--surface-elevated)',
               color: 'var(--text-soft)',
             }
+  const primaryDisabledReason =
+    primaryFlowAction.disabled
+      ? isDeploying || isTemplating || isDryRunning || isMonitoring || isLoadingClusterStatus
+        ? 'Операция уже выполняется. Дождитесь завершения текущего шага.'
+        : !clusterReady && (primaryFlowAction.tone === 'success' || primaryFlowAction.label.includes('мониторинг'))
+          ? 'Backend пока не видит рабочий Kubernetes context.'
+          : null
+      : null
 
   function startOperation(key: OperationKey, label: string) {
     setCurrentOperation({ key, label, startedAt: Date.now() })
@@ -534,7 +541,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
   }
 
   async function handleDeploy() {
-    if (!activeChartId || !deployConfirmed) return
+    if (!activeChartId || !canDeploy) return
     startOperation('deploy', 'Выполняем развёртывание release')
     setTab('deploy')
     setDeployResult(null)
@@ -562,8 +569,6 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
       }
       setDeployResult(failedResult)
       finishOperation('deploy', 'Развёртывание release', 'error', failedResult.summary)
-    } finally {
-      setDeployConfirmed(false)
     }
   }
 
@@ -701,6 +706,18 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
 
   async function handleUninstall() {
     if (!activeChartId) return
+    if (!uninstallConfirmed) {
+      setUninstallConfirmed(true)
+      setLastOperation({
+        key: 'uninstall',
+        label: 'Удаление release',
+        status: 'error',
+        finishedAt: Date.now(),
+        summary: 'Нажмите “Подтвердить удаление release”, если действительно хотите выполнить helm uninstall.',
+      })
+      return
+    }
+
     startOperation('uninstall', 'Удаляем release из кластера')
     setTab('uninstall')
     setUninstallResult(null)
@@ -710,6 +727,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
         release_name: releaseName.trim() || chart?.deployed_release_name || chart?.name || undefined,
       })
       setUninstallResult(result)
+      setUninstallConfirmed(false)
       const updated = await chartsApi.get(activeChartId)
       setChart(updated)
       setDeployResult(hydrateDeployResult(updated))
@@ -740,10 +758,10 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
       <div className="page-shell" style={pageShell}>
         <div style={{ ...card, padding: '1.4rem' }}>
           <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: 'var(--text)' }}>
-            Проверка и deploy
+            Развёртывание
           </h1>
           <div style={{ marginTop: '0.9rem', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-            Сначала сгенерируйте chart на вкладке генератора или выберите его из истории.
+            Сначала подготовьте chart в генераторе или выберите его из истории.
           </div>
           {onOpenGenerator && (
             <Button type="button" tone="primary" style={{ marginTop: '1rem' }} onClick={onOpenGenerator}>
@@ -765,13 +783,28 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
       `}</style>
       <div style={{ marginBottom: '1.25rem' }}>
         <h1 style={{ margin: 0, fontSize: '1.7rem', fontWeight: 800, color: 'var(--text)' }}>
-          Проверка и deploy
+          Развёртывание
         </h1>
         {chart && (
           <div style={{ marginTop: '0.45rem', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
             {chart.name} · Chart {chart.chart_version} · App {chart.app_version}
           </div>
         )}
+      </div>
+
+      <div className="release-pipeline-intro">
+        <div>
+          <div className="eyebrow">Release pipeline</div>
+          <div className="release-pipeline-intro__title">Безопасное развёртывание chart</div>
+          <div className="release-pipeline-intro__summary">
+            Сначала render и dry-run. После успешного dry-run можно сразу запускать реальное развёртывание.
+          </div>
+        </div>
+        <div className="release-pipeline-intro__steps" aria-label="Этапы развёртывания">
+          <span>1. Render</span>
+          <span>2. Dry-run</span>
+          <span>3. Deploy</span>
+        </div>
       </div>
 
       {activeOperation && activeOperationLabel && (
@@ -830,9 +863,9 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               }}
             >
               {deploySucceeded
-                ? 'Готово к post-deploy действиям'
+                ? 'Release развернут'
                 : dryRunReady
-                  ? 'Готово к deploy'
+                  ? 'Готово к развёртыванию'
                   : templateReady
                     ? 'Готово к dry-run'
                     : 'Начни с рендера'}
@@ -869,7 +902,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               >
                 {primaryFlowAction.label}
               </Button>
-              <Button type="button" tone="secondary" onClick={handleDownload}>
+              <Button type="button" tone="secondary" onClick={handleDownload} disabled={!chart || loadingChart}>
                 Скачать .tgz
               </Button>
               {onOpenGenerator && (
@@ -878,6 +911,11 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                 </Button>
               )}
             </div>
+            {primaryDisabledReason && (
+              <div style={{ color: 'var(--warning)', fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.45 }}>
+                {primaryDisabledReason}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -938,7 +976,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             {!clusterReady && clusterBlockingReason && (
               <details style={{ marginTop: '0.8rem' }}>
                 <summary style={{ cursor: 'pointer', color: 'var(--text-soft)', fontSize: '0.8rem', fontWeight: 700 }}>
-                  Почему deploy недоступен
+                  Почему развёртывание недоступно
                 </summary>
                 <div style={{ marginTop: '0.65rem', color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.6 }}>
                   {clusterBlockingReason}
@@ -997,35 +1035,6 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                   }}
                 />
               </label>
-
-              {showDeployConfirmation && (
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '0.65rem',
-                    padding: '0.75rem 0.8rem',
-                    borderRadius: '0.75rem',
-                    border: '1px solid var(--border-subtle)',
-                    background: 'var(--surface-elevated)',
-                    color: 'var(--text-soft)',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
-                    lineHeight: 1.45,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={deployConfirmed}
-                    onChange={e => setDeployConfirmed(e.target.checked)}
-                    style={{ width: '1rem', height: '1rem', marginTop: '0.12rem', flex: '0 0 auto' }}
-                  />
-                  <span>
-                    Подтверждаю реальное развёртывание в выбранный Kubernetes namespace
-                  </span>
-                </label>
-              )}
 
               {showRollbackControls && (
                 <>
@@ -1114,7 +1123,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-soft)', fontSize: '0.84rem', fontWeight: 700 }}>3. Реальный deploy</span>
+                <span style={{ color: 'var(--text-soft)', fontSize: '0.84rem', fontWeight: 700 }}>3. Реальное развёртывание</span>
                 <span style={{ color: isDeploying ? 'var(--accent)' : deployResult?.success ? 'var(--success)' : deployResult ? 'var(--warning)' : 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 800 }}>
                   {isDeploying ? 'идёт' : deployResult?.success ? 'готово' : deployResult ? 'ошибка' : 'ожидает'}
                 </span>
@@ -1135,7 +1144,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                 )}
                 {clusterBlockingReason && (
                   <div style={{ color: 'var(--warning)', fontWeight: 700, fontSize: '0.82rem', lineHeight: 1.5 }}>
-                    Реальный deploy-контур сейчас недоступен, но template и client-side dry-run можно использовать дальше.
+                    Контур развёртывания сейчас недоступен, но template и client-side dry-run можно использовать дальше.
                   </div>
                 )}
               </div>
@@ -1168,7 +1177,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               Дополнительные действия
             </div>
             <div style={{ color: 'var(--text-muted)', fontSize: '0.83rem', lineHeight: 1.55, marginBottom: '0.8rem' }}>
-              Эти действия нужны уже после основного deploy или для восстановления release.
+              Эти действия нужны уже после основного развёртывания или для восстановления release.
             </div>
             <div style={{ display: 'grid', gap: '0.55rem' }}>
               <button
@@ -1216,8 +1225,17 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                   opacity: !clusterReady || isUninstalling ? 0.65 : 1,
                 }}
               >
-                {isUninstalling ? 'Удаляем release...' : 'Удалить release'}
+                {isUninstalling ? 'Удаляем release...' : uninstallConfirmed ? 'Подтвердить удаление release' : 'Удалить release'}
               </button>
+              {uninstallConfirmed && !isUninstalling && (
+                <button
+                  type="button"
+                  onClick={() => setUninstallConfirmed(false)}
+                  style={{ ...subtleButton, width: '100%', textAlign: 'left' }}
+                >
+                  Отмена удаления
+                </button>
+              )}
             </div>
             </div>
           )}
@@ -1331,7 +1349,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
                   </div>
                 <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
-                  {dryRunResult?.summary || 'Client-side dry-run проверит release с текущими namespace и release name до реального deploy.'}
+                  {dryRunResult?.summary || 'Client-side dry-run проверит release с текущими namespace и release name до реального развёртывания.'}
                 </div>
               </div>
 
@@ -1346,7 +1364,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                   >
                     <Spinner label="Запускаем dry-run проверку..." />
                     <div style={{ marginTop: '0.7rem', color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.6 }}>
-                      Backend выполняет client-side Helm dry-run с теми же параметрами release и namespace, которые будут использованы для реального deploy.
+                      Backend выполняет client-side Helm dry-run с теми же параметрами release и namespace, которые будут использованы для реального развёртывания.
                     </div>
                   </div>
                 ) : !dryRunResult ? (
@@ -1403,7 +1421,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
                   </div>
                 <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
-                  {deployResult?.summary || (clusterReady ? 'Развёртывание выполнит helm upgrade --install в указанный namespace.' : 'Backend пока не может подключиться к Kubernetes API, поэтому deploy недоступен.')}
+                  {deployResult?.summary || (clusterReady ? 'Развёртывание выполнит helm upgrade --install в указанный namespace.' : 'Backend пока не может подключиться к Kubernetes API, поэтому развёртывание недоступно.')}
                 </div>
               </div>
 
@@ -1762,7 +1780,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
           <AuditList
             title="Журнал по chart"
             events={auditEvents}
-            emptyText="После генерации, проверки и deploy здесь появится история действий по текущему chart."
+            emptyText="После генерации, проверки и развёртывания здесь появится история действий по текущему chart."
           />
         </div>
       </details>

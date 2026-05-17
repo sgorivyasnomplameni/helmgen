@@ -68,6 +68,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [actionNote, setActionNote] = useState<{ tone: 'neutral' | 'success' | 'error'; text: string } | null>(null)
 
   const loadCharts = useCallback(async () => {
@@ -108,12 +109,22 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
   }, [active, loadCharts])
 
   async function handleDelete(chartId: number) {
+    if (confirmDeleteId !== chartId) {
+      setConfirmDeleteId(chartId)
+      setActionNote({
+        tone: 'neutral',
+        text: 'Нажмите “Удалить” ещё раз, чтобы подтвердить удаление chart из истории.',
+      })
+      return
+    }
+
     setDeletingId(chartId)
     setError(null)
     setActionNote({ tone: 'neutral', text: 'Удаляем chart из истории...' })
     try {
       await chartsApi.delete(chartId)
       setCharts(prev => prev.filter(chart => chart.id !== chartId))
+      setConfirmDeleteId(null)
       const events = await auditApi.recent(8)
       setRecentEvents(events)
       setActionNote({ tone: 'success', text: 'Chart удалён из истории.' })
@@ -193,7 +204,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
               state={loading || deletingId !== null ? 'running' : actionNote.tone === 'success' ? 'success' : actionNote.tone === 'error' ? 'error' : 'idle'}
               title="Состояние истории"
               message={actionNote.text}
-              meta={deletingId !== null ? 'Удаляем chart и обновляем журнал действий.' : 'История сохраняет собранные chart и быстрые переходы к deploy.'}
+              meta={deletingId !== null ? 'Удаляем chart и обновляем журнал действий.' : 'История сохраняет собранные chart и быстрые переходы к развёртыванию.'}
             />
           </div>
         )}
@@ -279,15 +290,20 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                   <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', alignSelf: 'start' }}>
                     {onOpenOps && (
                       <Button type="button" tone="secondary" size="sm" disabled={!isGenerated} onClick={() => onOpenOps(chart.id)}>
-                        Проверка и deploy
+                        Развёртывание
                       </Button>
                     )}
                     <Button type="button" tone="primary" size="sm" disabled={!isGenerated} onClick={() => handleDownload(chart.id, chart.name, chart.chart_version)}>
                       Скачать
                     </Button>
                     <Button type="button" tone="danger" size="sm" onClick={() => void handleDelete(chart.id)} disabled={deletingId === chart.id}>
-                      {deletingId === chart.id ? 'Удаление...' : 'Удалить'}
+                      {deletingId === chart.id ? 'Удаление...' : confirmDeleteId === chart.id ? 'Подтвердить удаление' : 'Удалить'}
                     </Button>
+                    {confirmDeleteId === chart.id && deletingId !== chart.id && (
+                      <Button type="button" tone="ghost" size="sm" onClick={() => setConfirmDeleteId(null)}>
+                        Отмена
+                      </Button>
+                    )}
                   </div>
                 </div>
               )
@@ -299,7 +315,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
         <AuditList
           title="Последние действия"
           events={recentEvents}
-          emptyText="После генерации, проверки и deploy здесь появится краткий журнал действий."
+          emptyText="После генерации, проверки и развёртывания здесь появится краткий журнал действий."
         />
       </div>
     </div>

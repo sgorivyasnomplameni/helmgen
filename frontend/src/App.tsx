@@ -145,7 +145,7 @@ export default function App() {
                   onClick={() => setView('ops')}
                   className={view === 'ops' ? 'app-nav__button is-active' : 'app-nav__button'}
                 >
-                  Проверка и deploy
+                  Развёртывание
                 </button>
                 <button
                   type="button"
