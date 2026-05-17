@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useState } from 'react'
 import { authApi } from '@/api/auth'
 import AuthPage from '@/pages/AuthPage'
+import ToastProvider from '@/components/ToastProvider'
 import GeneratorPage from '@/pages/GeneratorPage'
 import HistoryPage from '@/pages/HistoryPage'
 import OpsPage from '@/pages/OpsPage'
@@ -85,166 +86,168 @@ export default function App() {
   }
 
   return (
-    <div>
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 20,
-          background: 'var(--bg-elevated)',
-          borderBottom: '1px solid var(--border-subtle)',
-        }}
-      >
-        <div
+    <ToastProvider>
+      <div>
+        <header
           style={{
-            maxWidth: '1680px',
-            margin: '0 auto',
-            padding: '0.8rem 1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '1rem',
+            position: 'sticky',
+            top: 0,
+            zIndex: 20,
+            background: 'var(--bg-elevated)',
+            borderBottom: '1px solid var(--border-subtle)',
           }}
         >
-          <div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--text)' }}>
-              HelmGen
-            </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Генерация и хранение Helm-чартов
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ color: 'var(--text)', fontSize: '0.9rem', fontWeight: 700 }}>
-                {currentUser.full_name || currentUser.email}
+          <div
+            style={{
+              maxWidth: '1680px',
+              margin: '0 auto',
+              padding: '0.8rem 1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--text)' }}>
+                HelmGen
               </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Генерация и хранение Helm-чартов
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ color: 'var(--text)', fontSize: '0.9rem', fontWeight: 700 }}>
+                  {currentUser.full_name || currentUser.email}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  style={{
+                    marginTop: '0.1rem',
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    padding: 0,
+                  }}
+                >
+                  Выйти
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={handleLogout}
+                onClick={() => {
+                  startTransition(() => {
+                    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
+                  })
+                }}
                 style={{
-                  marginTop: '0.1rem',
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'var(--text-muted)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  padding: '0.55rem 0.85rem',
+                  borderRadius: '999px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--surface-contrast)',
+                  color: 'var(--text-soft)',
+                  fontWeight: 700,
                   cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  padding: 0,
                 }}
               >
-                Выйти
+                <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>
+                  {theme === 'dark' ? '◐' : '◑'}
+                </span>
+                <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
               </button>
-            </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                startTransition(() => {
-                  setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
-                })
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.55rem',
-                padding: '0.55rem 0.85rem',
-                borderRadius: '999px',
-                border: '1px solid var(--border-subtle)',
-                background: 'var(--surface-contrast)',
-                color: 'var(--text-soft)',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>
-                {theme === 'dark' ? '◐' : '◑'}
-              </span>
-              <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
-            </button>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  gap: '0.1rem',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '999px',
+                  padding: '0.15rem',
+                  background: 'var(--surface-base)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setView('generator')}
+                  style={{
+                    border: 'none',
+                    borderRadius: '999px',
+                    padding: '0.55rem 0.95rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: view === 'generator' ? 'var(--surface-contrast)' : 'transparent',
+                    color: view === 'generator' ? 'var(--text)' : 'var(--text-muted)',
+                  }}
+                >
+                  Генератор
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView('ops')}
+                  style={{
+                    border: 'none',
+                    borderRadius: '999px',
+                    padding: '0.55rem 0.95rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: view === 'ops' ? 'var(--surface-contrast)' : 'transparent',
+                    color: view === 'ops' ? 'var(--text)' : 'var(--text-muted)',
+                  }}
+                >
+                  Проверка и deploy
+                </button>
+              </div>
 
-            <div
-              style={{
-                display: 'inline-flex',
-                gap: '0.1rem',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '999px',
-                padding: '0.15rem',
-                background: 'var(--surface-base)',
-              }}
-            >
               <button
                 type="button"
-                onClick={() => setView('generator')}
+                onClick={() => setView('history')}
                 style={{
-                  border: 'none',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '999px',
                   padding: '0.55rem 0.95rem',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  background: view === 'generator' ? 'var(--surface-contrast)' : 'transparent',
-                  color: view === 'generator' ? 'var(--text)' : 'var(--text-muted)',
+                  background: view === 'history' ? 'var(--surface-contrast)' : 'transparent',
+                  color: view === 'history' ? 'var(--text)' : 'var(--text-muted)',
                 }}
               >
-                Генератор
-              </button>
-              <button
-                type="button"
-                onClick={() => setView('ops')}
-                style={{
-                  border: 'none',
-                  borderRadius: '999px',
-                  padding: '0.55rem 0.95rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  background: view === 'ops' ? 'var(--surface-contrast)' : 'transparent',
-                  color: view === 'ops' ? 'var(--text)' : 'var(--text-muted)',
-                }}
-              >
-                Проверка и deploy
+                История
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setView('history')}
-              style={{
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '999px',
-                padding: '0.55rem 0.95rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                background: view === 'history' ? 'var(--surface-contrast)' : 'transparent',
-                color: view === 'history' ? 'var(--text)' : 'var(--text-muted)',
-              }}
-            >
-              История
-            </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div style={{ display: view === 'generator' ? 'block' : 'none' }}>
-        <GeneratorPage
-          onChartReady={chartId => setActiveChartId(chartId)}
-          onOpenOps={() => setView('ops')}
-        />
+        <div style={{ display: view === 'generator' ? 'block' : 'none' }}>
+          <GeneratorPage
+            onChartReady={chartId => setActiveChartId(chartId)}
+            onOpenOps={() => setView('ops')}
+          />
+        </div>
+        <div style={{ display: view === 'ops' ? 'block' : 'none' }}>
+          <OpsPage
+            active={view === 'ops'}
+            activeChartId={activeChartId}
+            onOpenGenerator={() => setView('generator')}
+          />
+        </div>
+        <div style={{ display: view === 'history' ? 'block' : 'none' }}>
+          <HistoryPage
+            active={view === 'history'}
+            onOpenOps={chartId => {
+              setActiveChartId(chartId)
+              setView('ops')
+            }}
+          />
+        </div>
       </div>
-      <div style={{ display: view === 'ops' ? 'block' : 'none' }}>
-        <OpsPage
-          active={view === 'ops'}
-          activeChartId={activeChartId}
-          onOpenGenerator={() => setView('generator')}
-        />
-      </div>
-      <div style={{ display: view === 'history' ? 'block' : 'none' }}>
-        <HistoryPage
-          active={view === 'history'}
-          onOpenOps={chartId => {
-            setActiveChartId(chartId)
-            setView('ops')
-          }}
-        />
-      </div>
-    </div>
+    </ToastProvider>
   )
 }

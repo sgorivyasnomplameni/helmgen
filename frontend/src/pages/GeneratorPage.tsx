@@ -1,8 +1,11 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import Button from '@/components/Button'
+import OperationStatePanel from '@/components/OperationStatePanel'
 import type { ChartConfig, WorkloadType, ServiceType } from '@/types/generator'
 import WorkloadCard from '@/components/WorkloadCard'
 import ToggleSwitch from '@/components/ToggleSwitch'
 import RecommendationsBlock from '@/components/RecommendationsBlock'
+import { useToast } from '@/components/ToastProvider'
 import YamlPreview from '@/components/YamlPreview'
 import {
   chartsApi,
@@ -238,6 +241,7 @@ const card: React.CSSProperties = {
   padding: '1.2rem',
   boxShadow: 'var(--shadow)',
   border: '1px solid var(--border-subtle)',
+  animation: 'fadeUp 0.32s ease',
 }
 
 const fieldLabel: React.CSSProperties = {
@@ -347,8 +351,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   const formCardRef = useRef<HTMLDivElement | null>(null)
   const workflowCardRef = useRef<HTMLDivElement | null>(null)
   const advancedCardRef = useRef<HTMLDivElement | null>(null)
-  const previewPanelRef = useRef<HTMLDivElement | null>(null)
-  const recommendationsRef = useRef<HTMLDivElement | null>(null)
+  const { showToast } = useToast()
   const [config, setConfig] = useState<ChartConfig>(DEFAULT_CONFIG)
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
@@ -363,9 +366,23 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   const [isValidating, setIsValidating] = useState(false)
   const [actionNote, setActionNote] = useState<{ tone: 'neutral' | 'success' | 'error'; text: string } | null>(null)
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('preview')
+  const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false)
   const [showScenarios, setShowScenarios] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const deferredConfig = useDeferredValue(config)
+
+  useEffect(() => {
+    if (!previewDrawerOpen) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setPreviewDrawerOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [previewDrawerOpen])
 
   useEffect(() => {
     let cancelled = false
@@ -545,11 +562,14 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         tone: 'success',
         text: `Проект ${project.name} создан. Теперь chart будет сохранён внутри него.`,
       })
+      showToast(`Проект ${project.name} создан`, 'success')
     } catch (error) {
+      const message = extractApiErrorMessage(error, 'Не удалось создать проект.')
       setActionNote({
         tone: 'error',
-        text: extractApiErrorMessage(error, 'Не удалось создать проект.'),
+        text: message,
       })
+      showToast(message, 'error')
     } finally {
       setIsCreatingProject(false)
     }
@@ -573,12 +593,14 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       tone: 'success',
       text: 'Шаблон сохранён локально в браузере. Его можно использовать как черновик для следующей сессии.',
     })
+    showToast('Шаблон сохранён локально', 'success')
   }
 
   async function handleGenerate() {
     const errors = validateConfig()
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors)
+      showToast('Исправьте ошибки в форме перед генерацией', 'error')
       return
     }
 
@@ -606,12 +628,15 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       onChartReady?.(generatedChart.id)
       setStatus('success')
       setActionNote({ tone: 'success', text: `Чарт ${generatedChart.name} успешно собран. Теперь его можно проверить или скачать.` })
+      showToast(`Чарт ${generatedChart.name} собран`, 'success')
     } catch (error) {
+      const message = extractApiErrorMessage(error, 'Не удалось собрать chart. Проверьте состояние backend и попробуйте снова.')
       setStatus('error')
       setActionNote({
         tone: 'error',
-        text: extractApiErrorMessage(error, 'Не удалось собрать chart. Проверьте состояние backend и попробуйте снова.'),
+        text: message,
       })
+      showToast(message, 'error')
       window.setTimeout(() => setStatus('idle'), 3000)
     }
   }
@@ -628,6 +653,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         tone: result.valid ? 'success' : 'error',
         text: result.summary,
       })
+      showToast(result.summary, result.valid ? 'success' : 'error')
     } catch (error) {
       setValidation({
         valid: false,
@@ -637,10 +663,12 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
         engine: 'builtin',
         summary: 'Проверка завершилась с ошибкой запроса',
       })
+      const message = extractApiErrorMessage(error, 'Не удалось выполнить проверку чарта.')
       setActionNote({
         tone: 'error',
-        text: extractApiErrorMessage(error, 'Не удалось выполнить проверку чарта.'),
+        text: message,
       })
+      showToast(message, 'error')
     } finally {
       setIsValidating(false)
     }
@@ -770,50 +798,6 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   })
   const primaryToolbarAction = toolbarActions.find(action => action.primary) ?? toolbarActions[0]
   const secondaryToolbarActions = toolbarActions.filter(action => !action.primary)
-  const leftMenuItems = [
-    {
-      key: 'audit',
-      label: 'Рекомендации',
-      icon: '⚠️',
-      active: false,
-      onClick: () => recommendationsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
-    },
-    {
-      key: 'workflow',
-      label: 'Поток работы',
-      icon: '⚙️',
-      active: !showAdvanced && workspaceSection === 'preview',
-      onClick: () => workflowCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
-    },
-    {
-      key: 'form',
-      label: 'Основная форма',
-      icon: '🧩',
-      active: false,
-      onClick: () => formCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
-    },
-    {
-      key: 'advanced',
-      label: 'Расширенные',
-      icon: '🛠️',
-      active: showAdvanced,
-      onClick: () => {
-        setShowAdvanced(true)
-        advancedCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      },
-    },
-    {
-      key: 'preview',
-      label: 'Предпросмотр',
-      icon: '✅',
-      active: workspaceSection === 'preview',
-      onClick: () => {
-        setWorkspaceSection('preview')
-        previewPanelRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      },
-    },
-  ]
-
   const progressItems = [
     {
       key: 'config',
@@ -831,7 +815,10 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       done: Boolean(generatedChartId && !isDraftDirty),
       active: Boolean((configLooksReady && !generatedChartId) || isDraftDirty),
       disabled: false,
-      onClick: () => setWorkspaceSection('preview'),
+      onClick: () => {
+        setWorkspaceSection('preview')
+        setPreviewDrawerOpen(true)
+      },
     },
     {
       key: 'lint',
@@ -840,67 +827,45 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       done: Boolean(validation?.valid),
       active: Boolean(canUseBuiltArtifact && !validation?.valid),
       disabled: !canUseBuiltArtifact,
-      onClick: () => setWorkspaceSection('lint'),
+      onClick: () => {
+        setWorkspaceSection('lint')
+        setPreviewDrawerOpen(true)
+      },
     },
   ]
 
   return (
+    <>
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '260px minmax(0, 1fr) 430px',
+        gridTemplateColumns: 'minmax(0, 1fr)',
         gap: '1.5rem',
         alignItems: 'start',
         padding: '1.5rem',
-        maxWidth: '1680px',
+        maxWidth: '1240px',
         margin: '0 auto',
       }}
     >
-      <div style={{ position: 'sticky', top: '5.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div
           style={{
             ...card,
-            padding: '0.75rem',
+            padding: '1.2rem 1.25rem',
+            background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface-base) 92%) 0%, var(--surface-base) 55%, color-mix(in srgb, var(--success) 6%, var(--surface-base) 94%) 100%)',
             display: 'grid',
-            gap: '0.35rem',
+            gap: '0.45rem',
           }}
         >
-          {leftMenuItems.map(item => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={item.onClick}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.55rem',
-                width: '100%',
-                padding: '0.8rem 0.85rem',
-                borderRadius: '0.8rem',
-                border: item.active ? '1px solid color-mix(in srgb, var(--accent) 28%, transparent)' : '1px solid transparent',
-                background: item.active ? 'var(--surface-contrast)' : 'transparent',
-                color: item.active ? 'var(--text)' : 'var(--text-soft)',
-                fontWeight: item.active ? 800 : 700,
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-            >
-              <span style={{ fontSize: '0.95rem' }}>{item.icon}</span>
-              <span style={{ fontSize: '0.86rem' }}>{item.label}</span>
-            </button>
-          ))}
-        </div>
-
-        <div ref={recommendationsRef}>
-          <RecommendationsBlock config={deferredConfig} variant="sidebar" />
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>
+          <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--accent-contrast)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Helm Workflow
+          </div>
+          <h1 style={{ margin: 0, fontSize: '1.7rem', fontWeight: 900, color: 'var(--text)' }}>
             Генератор Helm-чартов
           </h1>
+          <div style={{ maxWidth: '780px', color: 'var(--text-soft)', fontSize: '0.92rem', lineHeight: 1.6 }}>
+            Спокойный инженерный поток: подготовь параметры, собери chart, быстро проверь манифест и только потом переходи в deploy.
+          </div>
         </div>
 
         <div
@@ -908,6 +873,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
             ...card,
             padding: '0.95rem 1.1rem',
             border: '1px solid var(--border-subtle)',
+            background: 'linear-gradient(180deg, var(--surface-base) 0%, color-mix(in srgb, var(--surface-muted) 72%, white 28%) 100%)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
@@ -917,41 +883,20 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-              <button
+              <Button
                 type="button"
+                tone="secondary"
+                size="sm"
                 onClick={() => {
                   resetGenerationState()
                   setConfig(DEFAULT_CONFIG)
                 }}
-                style={{
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '999px',
-                  background: 'var(--surface-elevated)',
-                  color: 'var(--text-soft)',
-                  fontWeight: 700,
-                  fontSize: '0.78rem',
-                  padding: '0.5rem 0.85rem',
-                  cursor: 'pointer',
-                }}
               >
                 Сбросить
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowScenarios(prev => !prev)}
-                style={{
-                  border: 'none',
-                  borderRadius: '999px',
-                  background: 'var(--accent-soft)',
-                  color: 'var(--accent-contrast)',
-                  fontWeight: 700,
-                  fontSize: '0.78rem',
-                  padding: '0.5rem 0.9rem',
-                  cursor: 'pointer',
-                }}
-              >
+              </Button>
+              <Button type="button" tone="primary" size="sm" onClick={() => setShowScenarios(prev => !prev)} style={{ boxShadow: 'none' }}>
                 {showScenarios ? 'Скрыть' : 'Показать'}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -979,6 +924,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       flexDirection: 'column',
                       gap: '0.65rem',
                       boxShadow: selected ? 'var(--shadow)' : 'none',
+                      transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
                     }}
                   >
                     <div>
@@ -1033,10 +979,10 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
           ref={workflowCardRef}
           style={{
             ...card,
-            padding: '1rem 1.05rem',
+            padding: '1.05rem 1.1rem',
             display: 'grid',
             gap: '1rem',
-            background: 'var(--surface-base)',
+            background: 'linear-gradient(180deg, var(--surface-base) 0%, var(--surface-muted) 100%)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -1047,7 +993,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
-              <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+              <span style={{ ...stepChipBase, background: 'var(--surface-elevated)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
                 {isDraftDirty
                   ? 'Есть изменения'
                   : reviewReady
@@ -1056,61 +1002,35 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       ? 'Чарт создан'
                       : 'Черновик'}
               </span>
-              <button
+              <Button
                 type="button"
+                tone="secondary"
+                size="sm"
                 onClick={() => {
                   resetGenerationState()
                   setFormErrors({})
                   setShowAdvanced(false)
                   setConfig(DEFAULT_CONFIG)
                 }}
-                style={{
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '999px',
-                  background: 'var(--surface-elevated)',
-                  color: 'var(--text-soft)',
-                  fontWeight: 700,
-                  fontSize: '0.8rem',
-                  padding: '0.55rem 0.9rem',
-                  cursor: 'pointer',
-                }}
               >
                 Сбросить
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveTemplate}
-                style={{
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '999px',
-                  background: 'var(--surface-elevated)',
-                  color: 'var(--text-soft)',
-                  fontWeight: 700,
-                  fontSize: '0.8rem',
-                  padding: '0.55rem 0.9rem',
-                  cursor: 'pointer',
-                }}
-              >
+              </Button>
+              <Button type="button" tone="secondary" size="sm" onClick={handleSaveTemplate}>
                 Сохранить шаблон
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                tone={primaryToolbarAction.tone === 'success' ? 'success' : 'primary'}
+                size="sm"
                 onClick={primaryToolbarAction.onClick}
                 disabled={primaryToolbarAction.disabled}
                 style={{
                   borderRadius: '999px',
-                  padding: '0.62rem 1rem',
-                  fontSize: '0.86rem',
-                  fontWeight: 800,
-                  cursor: primaryToolbarAction.disabled ? 'not-allowed' : 'pointer',
-                  opacity: primaryToolbarAction.disabled ? 0.5 : 1,
-                  background: primaryToolbarAction.tone === 'success' ? 'var(--success)' : '#4CAF50',
-                  color: '#fff',
-                  border: 'none',
+                  animation: primaryToolbarAction.disabled ? undefined : 'pulseGlow 2.8s ease-out infinite',
                 }}
               >
                 {primaryToolbarAction.label}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -1125,10 +1045,11 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   padding: '0.8rem 0.85rem',
                   borderRadius: '0.85rem',
                   border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 30%, var(--border-subtle) 70%)' : item.active ? 'color-mix(in srgb, var(--accent) 30%, var(--border-subtle) 70%)' : 'var(--border-subtle)'}`,
-                  background: item.active ? 'var(--surface-elevated)' : 'var(--surface-base)',
+                  background: item.done ? 'color-mix(in srgb, var(--success-soft) 55%, var(--surface-elevated) 45%)' : item.active ? 'var(--surface-elevated)' : 'var(--surface-base)',
                   cursor: item.disabled ? 'not-allowed' : 'pointer',
                   opacity: item.disabled ? 0.55 : 1,
                   textAlign: 'left',
+                  boxShadow: item.active ? 'var(--shadow)' : 'none',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -1159,6 +1080,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
             ))}
           </div>
 
+          <RecommendationsBlock config={deferredConfig} />
+
           <div
             style={{
               padding: '0.9rem 1rem',
@@ -1167,6 +1090,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
               border: '1px solid var(--border-subtle)',
               display: 'grid',
               gap: '0.65rem',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.8)',
             }}
           >
             <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -1197,6 +1121,11 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       border: action.tone === 'success'
                         ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
                         : '1px solid var(--border-subtle)',
+                      backgroundImage: action.tone === 'success'
+                        ? 'linear-gradient(90deg, var(--success-soft), color-mix(in srgb, var(--success-soft) 65%, white 35%), var(--success-soft))'
+                        : undefined,
+                      backgroundSize: action.tone === 'success' ? '200% 100%' : undefined,
+                      animation: action.tone === 'success' ? 'shimmer 5s linear infinite' : undefined,
                     }}
                   >
                     {action.label}
@@ -1216,37 +1145,80 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
             )}
           </div>
 
-          {actionNote && (
-            <div
-              style={{
-                padding: '0.8rem 0.95rem',
-                borderRadius: '0.8rem',
-                background:
-                  actionNote.tone === 'success'
-                    ? 'var(--success-soft)'
-                    : actionNote.tone === 'error'
-                      ? 'var(--danger-soft)'
-                      : 'var(--surface-elevated)',
-                color:
-                  actionNote.tone === 'success'
-                    ? 'var(--success)'
-                    : actionNote.tone === 'error'
-                      ? 'var(--danger)'
-                      : 'var(--text-soft)',
-                border:
-                  actionNote.tone === 'success'
-                    ? '1px solid color-mix(in srgb, var(--success) 30%, transparent)'
-                    : actionNote.tone === 'error'
-                      ? '1px solid color-mix(in srgb, var(--danger) 30%, transparent)'
-                      : '1px solid var(--border-subtle)',
-                fontSize: '0.84rem',
-                lineHeight: 1.5,
-                fontWeight: 600,
-              }}
-            >
-              {actionNote.text}
+          <OperationStatePanel
+            state={status === 'loading' || isValidating ? 'running' : status === 'error' || actionNote?.tone === 'error' ? 'error' : actionNote?.tone === 'success' ? 'success' : 'idle'}
+            title="Состояние операции"
+            message={actionNote?.text || latestResultSummary}
+            meta={
+              status === 'loading'
+                ? 'Собираем chart и обновляем рабочий артефакт.'
+                : isValidating
+                ? 'Идёт встроенная проверка и helm lint.'
+                  : generatedChartId
+                    ? `Текущий chart id: ${generatedChartId}`
+                    : 'Пока операции не запускались.'
+            }
+          />
+
+          <div
+            style={{
+              ...card,
+              padding: '1rem 1.05rem',
+              display: 'grid',
+              gap: '0.75rem',
+              background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 96%, white 4%) 0%, var(--surface-base) 100%)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Артефакты сборки
+                </div>
+                <div style={{ marginTop: '0.24rem', fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
+                  Предпросмотр и проверка chart
+                </div>
+                <div style={{ marginTop: '0.28rem', fontSize: '0.83rem', color: 'var(--text-muted)', lineHeight: 1.55, maxWidth: '760px' }}>
+                  YAML и lint открываются в отдельной широкой панели, чтобы код было реально удобно читать, а не пытаться смотреть его в узкой колонке.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
+                <Button
+                  type="button"
+                  tone="primary"
+                  size="sm"
+                  onClick={() => {
+                    setWorkspaceSection('preview')
+                    setPreviewDrawerOpen(true)
+                  }}
+                >
+                  Открыть предпросмотр
+                </Button>
+                <Button
+                  type="button"
+                  tone="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setWorkspaceSection('lint')
+                    setPreviewDrawerOpen(true)
+                  }}
+                  disabled={!canUseBuiltArtifact}
+                >
+                  Открыть lint
+                </Button>
+              </div>
             </div>
-          )}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span style={{ ...stepChipBase, background: generatedChartId ? 'var(--success-soft)' : 'var(--surface-muted)', color: generatedChartId ? 'var(--success)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                {generatedChartId ? 'YAML собран' : 'YAML ещё не собран'}
+              </span>
+              <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                {validation ? (validation.valid ? 'Lint пройден' : 'Lint с ошибками') : 'Lint ещё не запускался'}
+              </span>
+              <span style={{ ...stepChipBase, background: 'var(--surface-elevated)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                {workspaceSection === 'preview' ? 'Фокус: Preview' : 'Фокус: Lint'}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div ref={formCardRef} style={card}>
@@ -1289,23 +1261,9 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                       value={newProjectName}
                       onChange={event => setNewProjectName(event.target.value)}
                     />
-                    <button
-                      type="button"
-                      onClick={() => void handleCreateProject()}
-                      disabled={isCreatingProject}
-                      style={{
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: '0.65rem',
-                        padding: '0.7rem 0.9rem',
-                        background: 'var(--surface-contrast)',
-                        color: 'var(--text)',
-                        fontWeight: 700,
-                        cursor: isCreatingProject ? 'progress' : 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
+                    <Button type="button" tone="secondary" onClick={() => void handleCreateProject()} disabled={isCreatingProject} style={{ whiteSpace: 'nowrap' }}>
                       {isCreatingProject ? 'Создание...' : 'Создать'}
-                    </button>
+                    </Button>
                   </div>
                   {formErrors.projectId && (
                     <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
@@ -1419,22 +1377,9 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                 Службы, ingress, ресурсы и нетиповой workload. Для быстрого старта можно оставить значения по умолчанию.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(prev => !prev)}
-              style={{
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '999px',
-                background: showAdvanced ? 'var(--surface-contrast)' : 'var(--surface-elevated)',
-                color: 'var(--text)',
-                fontWeight: 700,
-                fontSize: '0.8rem',
-                padding: '0.55rem 0.9rem',
-                cursor: 'pointer',
-              }}
-            >
+            <Button type="button" tone="secondary" size="sm" onClick={() => setShowAdvanced(prev => !prev)}>
               {showAdvanced ? 'Скрыть настройки' : hasAdvancedOverrides ? 'Изменить настройки' : 'Показать настройки'}
-            </button>
+            </Button>
           </div>
 
           <div style={{ marginTop: '-0.1rem' }}>
@@ -1610,120 +1555,165 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
             </div>
           )}
         </div>
-
       </div>
 
-      <div ref={previewPanelRef} style={{ position: 'sticky', top: '5.75rem' }}>
+    </div>
+
+    {previewDrawerOpen && (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 50,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          background: 'rgba(15, 23, 42, 0.42)',
+          backdropFilter: 'blur(6px)',
+        }}
+        onClick={() => setPreviewDrawerOpen(false)}
+      >
         <div
           style={{
-            background: 'var(--surface-base)',
-            borderRadius: '1rem',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: '720px',
-            boxShadow: 'var(--shadow)',
-            border: '1px solid var(--border-subtle)',
+            width: 'min(1080px, calc(100vw - 2rem))',
+            height: '100vh',
+            background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 95%, white 5%) 0%, var(--surface-muted) 100%)',
+            borderLeft: '1px solid var(--border-subtle)',
+            boxShadow: '-18px 0 42px rgba(15, 23, 42, 0.18)',
+            padding: '1rem',
+            overflow: 'auto',
+            boxSizing: 'border-box',
+            display: 'grid',
+            alignContent: 'start',
+            gap: '0.9rem',
+            animation: 'fadeUp 0.24s ease',
           }}
+          onClick={event => event.stopPropagation()}
         >
-          <div style={{ padding: '1rem 1.25rem 0', background: 'var(--surface-base)' }}>
-            <div style={{ marginBottom: '0.85rem' }}>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                Результат
+          <div
+            style={{
+              ...card,
+              padding: '0.95rem 1rem',
+              display: 'grid',
+              gap: '0.75rem',
+              background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 96%, white 4%) 0%, var(--surface-base) 100%)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Рабочая область
+                </div>
+                <div style={{ marginTop: '0.24rem', color: 'var(--text)', fontSize: '1.08rem', fontWeight: 900 }}>
+                  {workspaceSection === 'preview' ? 'Предпросмотр манифеста' : 'Результат проверки chart'}
+                </div>
+                <div style={{ marginTop: '0.28rem', color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.55, maxWidth: '760px' }}>
+                  Здесь открывается широкий рабочий просмотр YAML и lint, чтобы код можно было читать и проверять без узкой боковой колонки.
+                </div>
               </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.25rem', overflowX: 'auto', marginBottom: '0.5rem' }}>
-              {([
-                ['preview', 'Preview'],
-                ['lint', 'Lint'],
-              ] as Array<[WorkspaceSection, string]>).map(([tab, label]) => {
-                const active = workspaceSection === tab
-                return (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setWorkspaceSection(tab)}
-                    style={{
-                      padding: '0.55rem 0.9rem',
-                      fontSize: '0.76rem',
-                      fontWeight: 700,
-                      border: 'none',
-                      borderRadius: '999px',
-                      cursor: 'pointer',
-                      background: active ? 'var(--surface-contrast)' : 'transparent',
-                      color: active ? 'var(--text)' : 'var(--text-muted)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {label}
-                  </button>
-                )
-              })}
+              <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto' }}>
+                  {([
+                    ['preview', 'Preview'],
+                    ['lint', 'Lint'],
+                  ] as Array<[WorkspaceSection, string]>).map(([tab, label]) => {
+                    const active = workspaceSection === tab
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setWorkspaceSection(tab)}
+                        style={{
+                          padding: '0.5rem 0.8rem',
+                          fontSize: '0.76rem',
+                          fontWeight: 800,
+                          border: `1px solid ${active ? 'color-mix(in srgb, var(--accent) 24%, transparent)' : 'var(--border-subtle)'}`,
+                          borderRadius: '999px',
+                          cursor: 'pointer',
+                          background: active ? 'var(--accent-soft)' : 'color-mix(in srgb, var(--surface-elevated) 76%, white 24%)',
+                          color: active ? 'var(--accent-contrast)' : 'var(--text-soft)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <Button type="button" tone="ghost" size="sm" onClick={() => setPreviewDrawerOpen(false)}>
+                  Закрыть
+                </Button>
+              </div>
             </div>
           </div>
 
-          <div style={{ flex: 1, background: 'var(--surface-elevated)', padding: '1rem', overflow: 'auto' }}>
-            {workspaceSection === 'preview' && (
-              <YamlPreview
-                config={deferredConfig}
-                chartId={generatedChartId ?? undefined}
-                chartName={config.appName || 'chart'}
-                chartVersion={config.version}
-              />
-            )}
+          {workspaceSection === 'preview' && (
+            <YamlPreview
+              config={deferredConfig}
+              chartId={generatedChartId ?? undefined}
+              chartName={config.appName || 'chart'}
+              chartVersion={config.version}
+            />
+          )}
 
-            {workspaceSection === 'lint' && (
-              <div>
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Результат проверки</div>
-                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation?.engine === 'helm lint' ? 'helm lint' : validation?.engine === 'helm_lint' ? 'helm lint' : 'builtin'}</span>
-                      <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation ? (validation.valid ? 'Прошло' : 'Ошибка') : 'Ожидает'}</span>
-                    </div>
-                  </div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
-                    {validation?.summary || 'После проверки здесь появится итог helm lint и встроенной валидации.'}
+          {workspaceSection === 'lint' && (
+            <div
+              style={{
+                background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 94%, white 6%) 0%, var(--surface-base) 100%)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '1rem',
+                padding: '1rem 1.05rem',
+                boxShadow: '0 10px 28px rgba(15, 23, 42, 0.08)',
+                minHeight: '620px',
+              }}
+            >
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
+                  <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Результат проверки</div>
+                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                    <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation?.engine === 'helm lint' ? 'helm lint' : validation?.engine === 'helm_lint' ? 'helm lint' : 'builtin'}</span>
+                    <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation ? (validation.valid ? 'Прошло' : 'Ошибка') : 'Ожидает'}</span>
                   </div>
                 </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                  {validation?.summary || 'После проверки здесь появится итог helm lint и встроенной валидации.'}
+                </div>
+              </div>
 
-                {!validation ? (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Результат проверки появится после запуска проверки.</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {validation.errors.length > 0 && (
-                      <div>
-                        <div style={{ color: 'var(--danger)', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Ошибки</div>
-                        <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
-                          {validation.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
-                        </ul>
-                      </div>
-                    )}
-
-                    {validation.warnings.length > 0 && (
-                      <div>
-                        <div style={{ color: 'var(--warning)', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Предупреждения</div>
-                        <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
-                          {validation.warnings.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
-                        </ul>
-                      </div>
-                    )}
-
+              {!validation ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Результат проверки появится после запуска проверки.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {validation.errors.length > 0 && (
                     <div>
-                      <div style={{ color: 'var(--success)', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Успешные проверки</div>
+                      <div style={{ color: 'var(--danger)', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Ошибки</div>
                       <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
-                        {validation.checks.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
+                        {validation.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                       </ul>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
 
-          </div>
+                  {validation.warnings.length > 0 && (
+                    <div>
+                      <div style={{ color: 'var(--warning)', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Предупреждения</div>
+                      <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
+                        {validation.warnings.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div>
+                    <div style={{ color: 'var(--success)', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.45rem' }}>Успешные проверки</div>
+                    <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
+                      {validation.checks.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    )}
+    </>
   )
 }

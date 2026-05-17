@@ -63,7 +63,7 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
   return (
     <div
       style={{
-        background: 'var(--surface-base)',
+        background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 94%, white 6%) 0%, var(--surface-base) 100%)',
         border: '1px solid var(--border-subtle)',
         borderRadius: '1rem',
         overflow: 'hidden',
@@ -71,13 +71,13 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
         flexDirection: 'column',
         height: '100%',
         minHeight: expanded ? '760px' : '560px',
-        boxShadow: 'var(--shadow)',
+        boxShadow: '0 10px 28px rgba(15, 23, 42, 0.08)',
       }}
     >
       <div
         style={{
           padding: '1rem 1.1rem 0.9rem',
-          background: 'var(--surface-base)',
+          background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 90%, white 10%) 0%, color-mix(in srgb, var(--surface-muted) 52%, white 48%) 100%)',
           borderBottom: '1px solid var(--border-subtle)',
         }}
       >
@@ -125,10 +125,10 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
                   border: active ? '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' : '1px solid var(--border-subtle)',
                   borderRadius: '999px',
                   cursor: disabled ? 'not-allowed' : 'pointer',
-                  background: active ? 'var(--accent-soft)' : 'var(--surface-elevated)',
+                  background: active ? 'var(--accent-soft)' : 'color-mix(in srgb, var(--surface-elevated) 84%, white 16%)',
                   color: disabled ? 'var(--text-muted)' : active ? 'var(--accent-contrast)' : 'var(--text-soft)',
                   whiteSpace: 'nowrap',
-                  opacity: disabled ? 0.5 : 1,
+                  opacity: disabled ? 0.42 : 1,
                 }}
               >
                 {tab}{disabled ? ' · не создан' : ''}
@@ -144,8 +144,8 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
       <div
         style={{
           flex: 1,
-          background: 'var(--surface-muted)',
-          padding: '1rem',
+          background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-muted) 85%, white 15%) 0%, var(--surface-muted) 100%)',
+          padding: '0.9rem',
           overflow: 'auto',
         }}
       >

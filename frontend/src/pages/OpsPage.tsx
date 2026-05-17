@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import AuditList from '@/components/AuditList'
 import Button from '@/components/Button'
 import CodeBlock from '@/components/CodeBlock'
+import OperationStatePanel from '@/components/OperationStatePanel'
 import StatusPill from '@/components/StatusPill'
+import { useToast } from '@/components/ToastProvider'
 import { auditApi } from '@/api/audit'
 import {
   chartsApi,
@@ -44,7 +46,7 @@ interface Props {
 }
 
 const pageShell: React.CSSProperties = {
-  maxWidth: '1640px',
+  maxWidth: '1720px',
   margin: '0 auto',
   padding: '1.5rem',
 }
@@ -54,6 +56,7 @@ const card: React.CSSProperties = {
   borderRadius: '1rem',
   border: '1px solid var(--border-subtle)',
   boxShadow: 'var(--shadow)',
+  animation: 'fadeUp 0.3s ease',
 }
 
 const actionButton: React.CSSProperties = {
@@ -69,6 +72,13 @@ const subtleButton: React.CSSProperties = {
   border: '1px solid var(--border-subtle)',
   background: 'var(--surface-base)',
   color: 'var(--text-soft)',
+}
+
+const consoleCard: React.CSSProperties = {
+  background: 'linear-gradient(180deg, color-mix(in srgb, var(--code-surface) 88%, #0f172a 12%) 0%, var(--code-bg) 100%)',
+  borderRadius: '1rem',
+  border: '1px solid color-mix(in srgb, var(--code-border) 72%, rgba(255,255,255,0.04) 28%)',
+  boxShadow: '0 18px 40px rgba(15, 23, 42, 0.18)',
 }
 
 function Spinner({ label = 'Загрузка' }: { label?: string }) {
@@ -173,6 +183,7 @@ function hydrateUninstallResult(chart: Chart): ChartUninstallResult | null {
 }
 
 export default function OpsPage({ activeChartId, active = true, onOpenGenerator }: Props) {
+  const { showToast } = useToast()
   const [chart, setChart] = useState<Chart | null>(null)
   const [loadingChart, setLoadingChart] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
@@ -455,6 +466,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
     if (activeChartId) {
       void auditApi.chart(activeChartId).then(setAuditEvents).catch(() => undefined)
     }
+    showToast(summary, status === 'success' ? 'success' : 'error')
   }
 
   async function refreshClusterStatus() {
@@ -764,41 +776,22 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
       </div>
 
       {activeOperation && activeOperationLabel && (
-        <div
-          style={{
-            ...card,
-            marginBottom: '1rem',
-            padding: '0.95rem 1.1rem',
-            background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--surface-base)) 0%, var(--surface-base) 100%)',
-            border: '1px solid color-mix(in srgb, var(--accent) 32%, transparent)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <Spinner label={activeOperationLabel} />
-            <StatusPill tone="accent" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              операция выполняется
-            </StatusPill>
-          </div>
-          <div style={{ marginTop: '0.45rem', color: 'var(--accent)', fontSize: '0.8rem', fontWeight: 700 }}>
-            Прошло: {activeOperationSeconds} сек.
-          </div>
-          {activeOperationDetails && (
-            <div style={{ marginTop: '0.55rem', color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.55 }}>
-              {activeOperationDetails}
-            </div>
-          )}
-          <div style={{ marginTop: '0.45rem', color: activeOperationExpectationTone, fontSize: '0.84rem', lineHeight: 1.55, fontWeight: 700 }}>
-            {activeOperationExpectation}
-          </div>
+        <div style={{ marginBottom: '1rem' }}>
+          <OperationStatePanel
+            state="running"
+            title={activeOperationLabel}
+            message={activeOperationDetails || 'Операция выполняется через backend Helm/Kubernetes.'}
+            meta={`Прошло: ${activeOperationSeconds} сек. ${activeOperationExpectation}`}
+          />
         </div>
       )}
 
       <div
         style={{
           ...card,
-          padding: '1.15rem 1.2rem',
+          padding: '1.2rem 1.25rem',
           marginBottom: '1.25rem',
-          background: 'linear-gradient(180deg, var(--surface-base) 0%, var(--surface-muted) 100%)',
+          background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface-base) 92%) 0%, var(--surface-base) 58%, color-mix(in srgb, var(--success) 5%, var(--surface-base) 95%) 100%)',
         }}
       >
         <div style={{ display: 'grid', gap: '1rem' }}>
@@ -869,7 +862,11 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                 tone={primaryFlowAction.tone === 'success' ? 'success' : primaryFlowAction.tone === 'accent' ? 'primary' : 'secondary'}
                 onClick={primaryFlowAction.onClick}
                 disabled={primaryFlowAction.disabled}
-                style={primaryFlowAction.tone === 'warning' ? primaryActionStyle : undefined}
+                style={{
+                  ...(primaryFlowAction.tone === 'warning' ? primaryActionStyle : {}),
+                  borderRadius: '999px',
+                  animation: primaryFlowAction.disabled ? undefined : 'pulseGlow 2.8s ease-out infinite',
+                }}
               >
                 {primaryFlowAction.label}
               </Button>
@@ -886,7 +883,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr)', gap: '1.25rem', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '260px minmax(0, 1fr)', gap: '1.25rem', alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div style={{ ...card, padding: '1.15rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
@@ -1155,23 +1152,14 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
               <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Последняя операция
               </div>
-              {!lastOperation ? (
-                <div style={{ marginTop: '0.55rem', color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.55 }}>
-                  После первого действия здесь появится краткий итог.
-                </div>
-              ) : (
-                <div style={{ marginTop: '0.55rem', display: 'grid', gap: '0.4rem' }}>
-                  <div style={{ color: lastOperation.status === 'success' ? 'var(--success)' : 'var(--warning)', fontWeight: 800, fontSize: '0.84rem' }}>
-                    {lastOperation.label}: {lastOperation.status === 'success' ? 'успешно' : 'с ошибкой'}
-                  </div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                    {new Date(lastOperation.finishedAt).toLocaleTimeString('ru-RU')}
-                  </div>
-                  <div style={{ color: 'var(--text-soft)', fontSize: '0.82rem', lineHeight: 1.55 }}>
-                    {lastOperation.summary}
-                  </div>
-                </div>
-              )}
+              <div style={{ marginTop: '0.55rem' }}>
+                <OperationStatePanel
+                  state={!lastOperation ? 'idle' : lastOperation.status === 'success' ? 'success' : 'error'}
+                  title={lastOperation?.label || 'Последняя операция'}
+                  message={lastOperation?.summary || 'После первого действия здесь появится краткий итог.'}
+                  meta={lastOperation ? new Date(lastOperation.finishedAt).toLocaleTimeString('ru-RU') : 'Пока операции не запускались.'}
+                />
+              </div>
             </div>
           </div>
 
@@ -1238,22 +1226,19 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
 
         <div
           style={{
-            background: 'var(--surface-base)',
-            borderRadius: '1rem',
-            border: '1px solid var(--border-subtle)',
+            ...consoleCard,
             minHeight: '720px',
             overflow: 'hidden',
-            boxShadow: 'var(--shadow)',
           }}
         >
-          <div style={{ padding: '1rem 1.25rem 0', background: 'var(--surface-base)' }}>
+          <div style={{ padding: '1rem 1.25rem 0', background: 'linear-gradient(180deg, color-mix(in srgb, var(--code-surface) 82%, black 18%) 0%, color-mix(in srgb, var(--code-bg) 92%, black 8%) 100%)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
               <div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.77rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                  Рабочий вывод
+                <div style={{ color: '#94a3b8', fontSize: '0.77rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  Инженерная консоль
                 </div>
-                <div style={{ marginTop: '0.22rem', color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>
-                  Мониторинг и результат операций
+                <div style={{ marginTop: '0.22rem', color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>
+                  Helm / kubectl / release output
                 </div>
               </div>
               <StatusPill tone="dark">helm / kubectl</StatusPill>
@@ -1270,12 +1255,11 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                       padding: '0.55rem 0.9rem',
                       fontSize: '0.76rem',
                       fontWeight: 700,
-                      border: 'none',
-                      borderRadius: '0.5rem 0.5rem 0 0',
+                      border: `1px solid ${activeTab ? 'rgba(96, 165, 250, 0.32)' : 'rgba(148, 163, 184, 0.16)'}`,
+                      borderRadius: '999px',
                       cursor: 'pointer',
-                      background: activeTab ? 'var(--surface-elevated)' : 'transparent',
-                      color: activeTab ? 'var(--text)' : 'var(--text-muted)',
-                      borderBottom: activeTab ? '2px solid var(--accent)' : '2px solid transparent',
+                      background: activeTab ? 'rgba(37, 99, 235, 0.16)' : 'rgba(15, 23, 42, 0.12)',
+                      color: activeTab ? '#eff6ff' : '#94a3b8',
                       whiteSpace: 'nowrap',
                     }}
                   >
@@ -1286,12 +1270,12 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             </div>
           </div>
 
-          <div style={{ background: 'var(--surface-elevated)', padding: '1rem', minHeight: '640px' }}>
+          <div style={{ background: 'transparent', padding: '1rem', minHeight: '640px' }}>
             {tab === 'template' && (
-              <div>
+              <div style={{ display: 'grid', gap: '1rem' }}>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Helm Template</div>
+                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Helm Template</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
                       <StatusPill tone="accent">helm template</StatusPill>
                       <StatusPill tone={templateResult?.success ? 'success' : templateResult ? 'danger' : 'neutral'}>
@@ -1299,7 +1283,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                       </StatusPill>
                     </div>
                   </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
                   {templateResult?.summary || 'После рендера здесь появятся итоговые Kubernetes-манифесты.'}
                 </div>
               </div>
@@ -1319,11 +1303,11 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
                   </div>
                 ) : !templateResult ? (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Результат template пока пустой.</div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Результат template пока пустой.</div>
                 ) : (
                   <>
                     {templateResult.errors.length > 0 && (
-                      <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
+                      <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
                         {templateResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                       </ul>
                     )}
@@ -1336,10 +1320,10 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             )}
 
             {tab === 'dry-run' && (
-              <div>
+              <div style={{ display: 'grid', gap: '1rem' }}>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Dry-Run Deploy</div>
+                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Dry-Run Deploy</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
                       <StatusPill tone="accent">helm dry-run</StatusPill>
                       <StatusPill tone={dryRunResult?.success ? 'success' : dryRunResult ? 'danger' : 'neutral'}>
@@ -1347,7 +1331,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                       </StatusPill>
                     </div>
                   </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
                   {dryRunResult?.summary || 'Client-side dry-run проверит release с текущими namespace и release name до реального deploy.'}
                 </div>
               </div>
@@ -1367,7 +1351,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
                   </div>
                 ) : !dryRunResult ? (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Результат dry-run пока пустой.</div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Результат dry-run пока пустой.</div>
                 ) : (
                   <>
                     {summarizeDryRunError(dryRunResult.errors) && (
@@ -1408,10 +1392,10 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             )}
 
             {tab === 'deploy' && (
-              <div>
+              <div style={{ display: 'grid', gap: '1rem' }}>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Развёртывание</div>
+                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Развёртывание</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
                       <StatusPill tone="success">helm deploy</StatusPill>
                       <StatusPill tone={deployResult?.success ? 'success' : deployResult ? 'danger' : 'neutral'}>
@@ -1419,7 +1403,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                       </StatusPill>
                     </div>
                   </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
                   {deployResult?.summary || (clusterReady ? 'Развёртывание выполнит helm upgrade --install в указанный namespace.' : 'Backend пока не может подключиться к Kubernetes API, поэтому deploy недоступен.')}
                 </div>
               </div>
@@ -1445,7 +1429,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
                   </div>
                 ) : !deployResult ? (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Развёртывание ещё не запускалось.</div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Развёртывание ещё не запускалось.</div>
                 ) : (
                   <>
                     <div
@@ -1455,7 +1439,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                         borderRadius: '0.8rem',
                         background: deployResult.success ? 'var(--success-soft)' : 'color-mix(in srgb, var(--accent) 10%, var(--surface-base) 90%)',
                         border: `1px solid ${deployResult.success ? 'color-mix(in srgb, var(--success) 30%, transparent)' : 'color-mix(in srgb, var(--accent) 24%, var(--border-subtle) 76%)'}`,
-                        color: deployResult.success ? 'var(--success)' : 'var(--text-soft)',
+                        color: deployResult.success ? 'var(--success)' : '#e2e8f0',
                         fontSize: '0.84rem',
                         lineHeight: 1.55,
                       }}
@@ -1470,7 +1454,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                       </summary>
                       <div style={{ marginTop: '0.75rem' }}>
                         {deployResult.errors.length > 0 && (
-                          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: 'var(--text-soft)' }}>
+                          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', color: '#fecaca' }}>
                             {deployResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                           </ul>
                         )}
@@ -1512,19 +1496,9 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                           {releaseStatusResult.errors.map(item => <li key={item} style={{ marginBottom: '0.35rem' }}>{item}</li>)}
                         </ul>
                       )}
-                      <pre
-                        style={{
-                          margin: 0,
-                          fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                          fontSize: '0.78rem',
-                          lineHeight: 1.7,
-                          color: releaseStatusResult.success ? '#dbeafe' : '#fecaca',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                        }}
-                      >
+                      <CodeBlock minHeight={220} style={{ color: releaseStatusResult.success ? '#dbeafe' : '#fecaca' }}>
                         {releaseStatusResult.output || '# Helm status не вернул вывод'}
-                      </pre>
+                      </CodeBlock>
                     </>
                   )}
                 </div>
@@ -1532,7 +1506,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             )}
 
             {tab === 'monitoring' && (
-              <div>
+              <div style={{ display: 'grid', gap: '1rem' }}>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
                     <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Мониторинг release</div>
@@ -1582,10 +1556,10 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             )}
 
             {tab === 'rollback' && (
-              <div>
+              <div style={{ display: 'grid', gap: '1rem' }}>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Rollback release</div>
+                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Rollback release</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
                       <StatusPill tone="warning">helm rollback</StatusPill>
                       <StatusPill tone={rollbackResult?.success ? 'success' : rollbackResult ? 'danger' : 'neutral'}>
@@ -1593,7 +1567,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                       </StatusPill>
                     </div>
                   </div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
                     {rollbackResult?.summary || 'Rollback откатывает release к предыдущей или указанной ревизии Helm.'}
                   </div>
                 </div>
@@ -1621,14 +1595,14 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <div style={{ color: 'var(--text)', fontSize: '0.88rem', fontWeight: 800 }}>
+                        <div style={{ color: '#f8fafc', fontSize: '0.88rem', fontWeight: 800 }}>
                           Доступные ревизии для rollback
                         </div>
                         <Button type="button" tone="secondary" size="sm" onClick={() => void handleReleaseHistory()} disabled={isLoadingReleaseHistory || !clusterReady}>
                           {isLoadingReleaseHistory ? 'Обновляем...' : 'Обновить историю'}
                         </Button>
                       </div>
-                      <div style={{ marginTop: '0.45rem', color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                      <div style={{ marginTop: '0.45rem', color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.55 }}>
                         {releaseHistoryResult?.summary || 'Сначала загрузите Helm history, чтобы выбрать ревизию перед откатом.'}
                       </div>
                       {releaseHistoryResult?.errors.length ? (
@@ -1658,13 +1632,13 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                               }}
                             >
                               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
-                                <span style={{ color: 'var(--text)', fontWeight: 800 }}>Revision {entry.revision}</span>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{entry.status || 'unknown'}</span>
+                                <span style={{ color: '#f8fafc', fontWeight: 800 }}>Revision {entry.revision}</span>
+                                <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{entry.status || 'unknown'}</span>
                               </div>
-                              <div style={{ marginTop: '0.28rem', color: 'var(--text-soft)', fontSize: '0.8rem', lineHeight: 1.55 }}>
+                              <div style={{ marginTop: '0.28rem', color: '#cbd5e1', fontSize: '0.8rem', lineHeight: 1.55 }}>
                                 {entry.description || 'Описание ревизии не указано'}
                               </div>
-                              <div style={{ marginTop: '0.28rem', color: 'var(--text-muted)', fontSize: '0.76rem', lineHeight: 1.5 }}>
+                              <div style={{ marginTop: '0.28rem', color: '#94a3b8', fontSize: '0.76rem', lineHeight: 1.5 }}>
                                 {entry.updated || 'Время не указано'}{entry.chart ? ` · ${entry.chart}` : ''}{entry.app_version ? ` · App ${entry.app_version}` : ''}
                               </div>
                             </button>
@@ -1674,7 +1648,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
 
                     {!rollbackResult ? (
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Rollback ещё не запускался. Для запуска нужно подтверждение слева.</div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Rollback ещё не запускался. Для запуска нужно подтверждение слева.</div>
                     ) : (
                       <>
                         <div
@@ -1708,10 +1682,10 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             )}
 
             {tab === 'uninstall' && (
-              <div>
+              <div style={{ display: 'grid', gap: '1rem' }}>
                 <div style={{ marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
-                    <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Удаление release</div>
+                    <div style={{ color: '#f8fafc', fontSize: '1rem', fontWeight: 800 }}>Удаление release</div>
                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
                       <StatusPill tone="danger">helm uninstall</StatusPill>
                       <StatusPill tone={uninstallResult?.success ? 'success' : uninstallResult ? 'danger' : 'neutral'}>
@@ -1719,7 +1693,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                       </StatusPill>
                     </div>
                   </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>
                   {uninstallResult?.summary || 'Удаление release выполнит helm uninstall в указанный namespace.'}
                 </div>
               </div>
@@ -1739,7 +1713,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
                     </div>
                   </div>
                 ) : !uninstallResult ? (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>Удаление release ещё не запускалось.</div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Удаление release ещё не запускалось.</div>
                 ) : (
                   <>
                     <div

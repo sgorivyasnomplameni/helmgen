@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import AuditList from '@/components/AuditList'
 import Button from '@/components/Button'
+import OperationStatePanel from '@/components/OperationStatePanel'
 import StatusPill from '@/components/StatusPill'
+import { useToast } from '@/components/ToastProvider'
 import { auditApi } from '@/api/audit'
 import { chartsApi, extractApiErrorMessage } from '@/api/charts'
 import { projectsApi } from '@/api/projects'
@@ -20,6 +22,7 @@ const card: React.CSSProperties = {
   borderRadius: '1rem',
   border: '1px solid var(--border-subtle)',
   boxShadow: 'var(--shadow)',
+  animation: 'fadeUp 0.3s ease',
 }
 
 function formatDate(value: string): string {
@@ -59,6 +62,7 @@ interface Props {
 }
 
 export default function HistoryPage({ active = true, onOpenOps }: Props) {
+  const { showToast } = useToast()
   const [charts, setCharts] = useState<Chart[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [recentEvents, setRecentEvents] = useState<AuditEvent[]>([])
@@ -84,12 +88,15 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
         tone: 'success',
         text: data.length > 0 ? `История обновлена: ${data.length} chart(ов).` : 'История загружена. Пока записей нет.',
       })
+      showToast('История обновлена', 'success')
     } catch (error) {
-      setError(extractApiErrorMessage(error, 'Не удалось загрузить историю чартов'))
+      const message = extractApiErrorMessage(error, 'Не удалось загрузить историю чартов')
+      setError(message)
       setActionNote({
         tone: 'error',
-        text: extractApiErrorMessage(error, 'Не удалось загрузить историю чартов'),
+        text: message,
       })
+      showToast(message, 'error')
     } finally {
       setLoading(false)
     }
@@ -111,10 +118,12 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
       const events = await auditApi.recent(8)
       setRecentEvents(events)
       setActionNote({ tone: 'success', text: 'Chart удалён из истории.' })
+      showToast('Chart удалён из истории', 'success')
     } catch (error) {
       const message = extractApiErrorMessage(error, 'Не удалось удалить чарт')
       setError(message)
       setActionNote({ tone: 'error', text: message })
+      showToast(message, 'error')
     } finally {
       setDeletingId(null)
     }
@@ -128,12 +137,15 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
 
   return (
     <div style={pageShell}>
-      <div style={{ marginBottom: '1.25rem' }}>
-        <h1 style={{ margin: 0, fontSize: '1.7rem', fontWeight: 800, color: 'var(--text)' }}>
+      <div style={{ ...card, marginBottom: '1.25rem', padding: '1.15rem 1.2rem', background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface-base) 92%) 0%, var(--surface-base) 60%, color-mix(in srgb, var(--success) 4%, var(--surface-base) 96%) 100%)' }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Архив и действия
+        </div>
+        <h1 style={{ margin: '0.3rem 0 0', fontSize: '1.7rem', fontWeight: 900, color: 'var(--text)' }}>
           История чартов
         </h1>
-        <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-          Архив ранее собранных chart с быстрым скачиванием и переходом к проверке.
+        <p style={{ margin: '0.35rem 0 0', color: 'var(--text-soft)', fontSize: '0.95rem', maxWidth: '760px', lineHeight: 1.6 }}>
+          Архив ранее собранных chart с быстрым скачиванием, переходом к проверке и понятным статусом последнего состояния.
         </p>
       </div>
 
@@ -184,28 +196,13 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
         )}
 
         {actionNote && (
-          <div
-            style={{
-              marginBottom: '1rem',
-              padding: '0.85rem 1rem',
-              borderRadius: '0.8rem',
-              background:
-                actionNote.tone === 'success'
-                  ? 'var(--success-soft)'
-                  : actionNote.tone === 'error'
-                    ? 'var(--danger-soft)'
-                    : 'var(--surface-muted)',
-              color:
-                actionNote.tone === 'success'
-                  ? 'var(--success)'
-                  : actionNote.tone === 'error'
-                    ? 'var(--danger)'
-                    : 'var(--text-soft)',
-              border: '1px solid var(--border-subtle)',
-              fontWeight: 600,
-            }}
-          >
-            {actionNote.text}
+          <div style={{ marginBottom: '1rem' }}>
+            <OperationStatePanel
+              state={loading || deletingId !== null ? 'running' : actionNote.tone === 'success' ? 'success' : actionNote.tone === 'error' ? 'error' : 'idle'}
+              title="Состояние истории"
+              message={actionNote.text}
+              meta={deletingId !== null ? 'Удаляем chart и обновляем журнал действий.' : 'История сохраняет собранные chart и быстрые переходы к deploy.'}
+            />
           </div>
         )}
 
@@ -235,6 +232,8 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
               return (
                 <div
                   key={chart.id}
+                  data-testid="history-chart-item"
+                  data-chart-name={chart.name}
                   style={{
                     border: '1px solid var(--border-subtle)',
                     borderRadius: '1rem',
@@ -244,6 +243,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                     gap: '1rem',
                     alignItems: 'center',
                     background: 'linear-gradient(180deg, var(--surface-base) 0%, var(--surface-muted) 100%)',
+                    transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
                   }}
                 >
                   <div style={{ minWidth: 0 }}>
@@ -278,13 +278,13 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                         </StatusPill>
                       )}
                     </div>
-                    <div style={{ marginTop: '0.7rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
-                      <span>Создан: {formatDate(chart.created_at)}</span>
-                      {chart.deployed_at && <span>Deploy: {formatDate(chart.deployed_at)}</span>}
+                    <div style={{ marginTop: '0.7rem', display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+                      <StatusPill tone="neutral">Создан: {formatDate(chart.created_at)}</StatusPill>
+                      {chart.deployed_at && <StatusPill tone="neutral">Deploy: {formatDate(chart.deployed_at)}</StatusPill>}
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', alignSelf: 'start' }}>
                     {onOpenOps && (
                       <Button type="button" tone="secondary" size="sm" disabled={!isGenerated} onClick={() => onOpenOps(chart.id)}>
                         Проверка и deploy
