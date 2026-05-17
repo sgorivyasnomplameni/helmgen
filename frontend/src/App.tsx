@@ -74,11 +74,7 @@ export default function App() {
   }
 
   if (!authReady) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: 'var(--text-muted)' }}>
-        Проверяем сессию...
-      </div>
-    )
+    return <div className="app-loading">Проверяем сессию...</div>
   }
 
   if (!currentUser) {
@@ -87,37 +83,19 @@ export default function App() {
 
   return (
     <ToastProvider>
-      <div>
-        <header
-          style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 20,
-            background: 'var(--bg-elevated)',
-            borderBottom: '1px solid var(--border-subtle)',
-          }}
-        >
-          <div
-            style={{
-              maxWidth: '1680px',
-              margin: '0 auto',
-              padding: '0.8rem 1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '1rem',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--text)' }}>
+      <div className="app-shell">
+        <header className="app-header">
+          <div className="app-header__inner">
+            <div className="app-brand">
+              <div style={{ fontSize: '1.1rem', fontWeight: 950, color: 'var(--text)' }}>
                 HelmGen
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 Генерация и хранение Helm-чартов
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ textAlign: 'right' }}>
+            <div className="app-header__actions">
+              <div className="app-user">
                 <div style={{ color: 'var(--text)', fontSize: '0.9rem', fontWeight: 700 }}>
                   {currentUser.full_name || currentUser.email}
                 </div>
@@ -145,82 +123,39 @@ export default function App() {
                     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
                   })
                 }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.55rem',
-                  padding: '0.55rem 0.85rem',
-                  borderRadius: '999px',
-                  border: '1px solid var(--border-subtle)',
-                  background: 'var(--surface-contrast)',
-                  color: 'var(--text-soft)',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
+                className="app-theme-toggle"
+                aria-label="Переключить тему"
               >
-                <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>
+                <span aria-hidden="true" style={{ fontSize: '0.95rem', lineHeight: 1 }}>
                   {theme === 'dark' ? '◐' : '◑'}
                 </span>
                 <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
               </button>
 
-              <div
-                style={{
-                  display: 'inline-flex',
-                  gap: '0.1rem',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '999px',
-                  padding: '0.15rem',
-                  background: 'var(--surface-base)',
-                }}
-              >
+              <nav className="app-nav" aria-label="Основные разделы">
                 <button
                   type="button"
                   onClick={() => setView('generator')}
-                  style={{
-                    border: 'none',
-                    borderRadius: '999px',
-                    padding: '0.55rem 0.95rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    background: view === 'generator' ? 'var(--surface-contrast)' : 'transparent',
-                    color: view === 'generator' ? 'var(--text)' : 'var(--text-muted)',
-                  }}
+                  className={view === 'generator' ? 'app-nav__button is-active' : 'app-nav__button'}
                 >
                   Генератор
                 </button>
                 <button
                   type="button"
                   onClick={() => setView('ops')}
-                  style={{
-                    border: 'none',
-                    borderRadius: '999px',
-                    padding: '0.55rem 0.95rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    background: view === 'ops' ? 'var(--surface-contrast)' : 'transparent',
-                    color: view === 'ops' ? 'var(--text)' : 'var(--text-muted)',
-                  }}
+                  className={view === 'ops' ? 'app-nav__button is-active' : 'app-nav__button'}
                 >
                   Проверка и deploy
                 </button>
-              </div>
+                <button
+                  type="button"
+                  onClick={() => setView('history')}
+                  className={view === 'history' ? 'app-nav__button is-active' : 'app-nav__button'}
+                >
+                  История
+                </button>
+              </nav>
 
-              <button
-                type="button"
-                onClick={() => setView('history')}
-                style={{
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '999px',
-                  padding: '0.55rem 0.95rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  background: view === 'history' ? 'var(--surface-contrast)' : 'transparent',
-                  color: view === 'history' ? 'var(--text)' : 'var(--text-muted)',
-                }}
-              >
-                История
-              </button>
             </div>
           </div>
         </header>

@@ -1,10 +1,10 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import Button from '@/components/Button'
-import OperationStatePanel from '@/components/OperationStatePanel'
 import type { ChartConfig, WorkloadType, ServiceType } from '@/types/generator'
 import WorkloadCard from '@/components/WorkloadCard'
 import ToggleSwitch from '@/components/ToggleSwitch'
 import RecommendationsBlock from '@/components/RecommendationsBlock'
+import { FormField, ResponsiveGrid } from '@/components/FormLayout'
 import { useToast } from '@/components/ToastProvider'
 import YamlPreview from '@/components/YamlPreview'
 import {
@@ -135,7 +135,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     id: 'postgres',
     title: 'Stateful БД для dev/test',
     summary: 'Deployable StatefulSet с Redis и внутренним ClusterIP-сервисом.',
-    goal: 'Показывает, чем stateful-нагрузка отличается от обычного Deployment, сохраняя практичный dev/test-профиль.',
+    goal: 'Показывает, чем stateful-нагрузка отличается от обычного Deployment, сохраняя практичный профиль для dev/test.',
     expected: 'Chart должен проходить lint, а deploy не должен упираться в root-образ или несуществующий тег. Для dev/test допустимо одно предупреждение про writable filesystem.',
     highlights: ['StatefulSet', '1 реплика', 'ClusterIP', 'Dev/Test'],
     config: {
@@ -238,20 +238,10 @@ const DEMO_SCENARIOS: DemoScenario[] = [
 const card: React.CSSProperties = {
   background: 'var(--surface-base)',
   borderRadius: '0.875rem',
-  padding: '1.2rem',
+  padding: '1rem 1.05rem',
   boxShadow: 'var(--shadow)',
   border: '1px solid var(--border-subtle)',
   animation: 'fadeUp 0.32s ease',
-}
-
-const fieldLabel: React.CSSProperties = {
-  display: 'block',
-  fontSize: '0.78rem',
-  fontWeight: 600,
-  color: 'var(--text-muted)',
-  marginBottom: '0.375rem',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
 }
 
 const input: React.CSSProperties = {
@@ -270,28 +260,38 @@ const sectionTitle: React.CSSProperties = {
   fontSize: '1rem',
   fontWeight: 700,
   color: 'var(--text)',
-  marginBottom: '0.35rem',
+  marginBottom: '0.25rem',
 }
 
 const sectionHint: React.CSSProperties = {
-  margin: '0 0 1rem',
+  margin: '0 0 0.75rem',
   fontSize: '0.82rem',
   color: 'var(--text-muted)',
   lineHeight: 1.5,
 }
 
 const nestedPanel: React.CSSProperties = {
-  marginTop: '0.9rem',
-  padding: '0.9rem',
-  borderRadius: '0.85rem',
+  marginTop: '0.8rem',
+  padding: '0.8rem 0.85rem',
+  borderRadius: '0.8rem',
   background: 'var(--surface-elevated)',
   border: '1px solid var(--border-subtle)',
+}
+
+const capabilityPanel: React.CSSProperties = {
+  padding: '0.9rem 0.95rem',
+  borderRadius: '0.95rem',
+  background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 96%, white 4%) 0%, var(--surface-base) 100%)',
+  border: '1px solid var(--border-subtle)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.65)',
+  display: 'grid',
+  gap: '0.75rem',
 }
 
 const divider: React.CSSProperties = {
   border: 'none',
   borderTop: '1px solid var(--border-subtle)',
-  margin: '1.25rem 0',
+  margin: '1rem 0',
 }
 
 const stepChipBase: React.CSSProperties = {
@@ -325,23 +325,6 @@ type FormErrors = Partial<Record<
   string
 >>
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label style={fieldLabel}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function Grid2({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
-      {children}
-    </div>
-  )
-}
-
 interface GeneratorPageProps {
   onChartReady?: (chartId: number) => void
   onOpenOps?: () => void
@@ -351,6 +334,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   const formCardRef = useRef<HTMLDivElement | null>(null)
   const workflowCardRef = useRef<HTMLDivElement | null>(null)
   const advancedCardRef = useRef<HTMLDivElement | null>(null)
+  const scenariosRef = useRef<HTMLDivElement | null>(null)
   const { showToast } = useToast()
   const [config, setConfig] = useState<ChartConfig>(DEFAULT_CONFIG)
   const [projects, setProjects] = useState<Project[]>([])
@@ -364,9 +348,10 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   const [isDraftDirty, setIsDraftDirty] = useState(false)
   const [validation, setValidation] = useState<ChartValidationResult | null>(null)
   const [isValidating, setIsValidating] = useState(false)
-  const [actionNote, setActionNote] = useState<{ tone: 'neutral' | 'success' | 'error'; text: string } | null>(null)
+  const [, setActionNote] = useState<{ tone: 'neutral' | 'success' | 'error'; text: string } | null>(null)
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>('preview')
   const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false)
+  const [previewWide, setPreviewWide] = useState(false)
   const [showScenarios, setShowScenarios] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const deferredConfig = useDeferredValue(config)
@@ -383,6 +368,30 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [previewDrawerOpen])
+
+  useEffect(() => {
+    if (!showScenarios) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setShowScenarios(false)
+      }
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target
+      if (scenariosRef.current && target instanceof Node && !scenariosRef.current.contains(target)) {
+        setShowScenarios(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('mousedown', handlePointerDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [showScenarios])
 
   useEffect(() => {
     let cancelled = false
@@ -484,6 +493,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     resetGenerationState()
     setFormErrors({})
     setShowAdvanced(true)
+    setShowScenarios(false)
     setConfig(scenario.config)
   }
 
@@ -674,14 +684,6 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
     }
   }
 
-  const latestResultSummary = validation
-    ? validation.summary
-    : isDraftDirty
-      ? 'Конфигурация изменилась. Пересоберите chart, чтобы проверки и архив снова стали актуальными.'
-      : generatedChartId
-        ? 'Чарт готов к проверке, скачиванию или переходу в экран deploy.'
-        : 'Заполните форму и запустите сборку.'
-
   const configLooksReady = Boolean(
     config.appName.trim()
       && config.version.trim()
@@ -689,7 +691,6 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       && config.imageTag.trim()
       && Object.keys(validateConfig()).length === 0,
   )
-  const reviewReady = Boolean(validation?.valid)
   const canUseBuiltArtifact = Boolean(generatedChartId && !isDraftDirty)
   const hasAdvancedOverrides =
     config.workloadType !== DEFAULT_CONFIG.workloadType
@@ -798,6 +799,15 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
   })
   const primaryToolbarAction = toolbarActions.find(action => action.primary) ?? toolbarActions[0]
   const secondaryToolbarActions = toolbarActions.filter(action => !action.primary)
+  const workspaceSummary = Object.keys(formErrors).length > 0
+    ? 'Исправьте ошибки формы.'
+    : isDraftDirty
+      ? 'Конфигурация изменилась. Обновите chart.'
+      : validation?.valid
+        ? 'Проверка пройдена. Можно переходить к deploy.'
+        : generatedChartId
+          ? 'Чарт собран. Следующий шаг: проверка.'
+          : 'Заполните форму и соберите chart.'
   const progressItems = [
     {
       key: 'config',
@@ -833,56 +843,76 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       },
     },
   ]
+  const selectedScenario =
+    DEMO_SCENARIOS.find(
+      scenario =>
+        config.appName === scenario.config.appName &&
+        config.workloadType === scenario.config.workloadType &&
+        config.imageTag === scenario.config.imageTag,
+    ) ?? null
+  const networkingSummary = [
+    config.service.enabled ? `Service ${config.service.type}` : 'Без Service',
+    config.ingress.enabled ? 'Ingress включен' : 'Без Ingress',
+  ]
+  const resourcesSummary = config.resources.enabled
+    ? [
+        `Запросы ${config.resources.requests.cpu || 'n/a'} / ${config.resources.requests.memory || 'n/a'}`,
+        `Лимиты ${config.resources.limits.cpu || 'n/a'} / ${config.resources.limits.memory || 'n/a'}`,
+      ]
+    : ['Ресурсы по умолчанию']
+  const securitySummary = [
+    config.security.podSecurityContext.runAsNonRoot ? 'Без root' : 'Root разрешён',
+    config.security.containerSecurityContext.readOnlyRootFilesystem ? 'ФС только для чтения' : 'ФС на запись',
+    config.security.containerSecurityContext.privileged ? 'Привилегированный режим' : 'Без привилегий',
+    config.security.hostNetwork ? 'Сеть хоста' : 'Сеть Pod',
+  ]
 
   return (
     <>
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr)',
-        gap: '1.5rem',
-        alignItems: 'start',
-        padding: '1.5rem',
-        maxWidth: '1240px',
-        margin: '0 auto',
-      }}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <div className="generator-shell">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <div
+          ref={scenariosRef}
           style={{
             ...card,
-            padding: '1.2rem 1.25rem',
-            background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface-base) 92%) 0%, var(--surface-base) 55%, color-mix(in srgb, var(--success) 6%, var(--surface-base) 94%) 100%)',
-            display: 'grid',
-            gap: '0.45rem',
-          }}
-        >
-          <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--accent-contrast)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Helm Workflow
-          </div>
-          <h1 style={{ margin: 0, fontSize: '1.7rem', fontWeight: 900, color: 'var(--text)' }}>
-            Генератор Helm-чартов
-          </h1>
-          <div style={{ maxWidth: '780px', color: 'var(--text-soft)', fontSize: '0.92rem', lineHeight: 1.6 }}>
-            Спокойный инженерный поток: подготовь параметры, собери chart, быстро проверь манифест и только потом переходи в deploy.
-          </div>
-        </div>
-
-        <div
-          style={{
-            ...card,
-            padding: '0.95rem 1.1rem',
+            padding: '0.8rem 0.95rem',
             border: '1px solid var(--border-subtle)',
-            background: 'linear-gradient(180deg, var(--surface-base) 0%, color-mix(in srgb, var(--surface-muted) 72%, white 28%) 100%)',
+            background: 'var(--surface-base)',
+            position: 'relative',
+            overflow: 'visible',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text)' }}>
-                Тестовые сценарии
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.9rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0, flex: '1 1 420px' }}>
+              <div style={{ fontSize: '0.73rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Быстрый старт
+              </div>
+              <div style={{ marginTop: '0.18rem', fontSize: '0.92rem', fontWeight: 800, color: 'var(--text)' }}>
+                {selectedScenario ? selectedScenario.title : 'Чистая конфигурация'}
+              </div>
+              <div style={{ marginTop: '0.16rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                {selectedScenario ? selectedScenario.summary : 'Начни с пустой формы или быстро примени готовый сценарий.'}
+              </div>
+              <div style={{ marginTop: '0.3rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                {(selectedScenario ? selectedScenario.highlights : ['Без пресета', 'Ручная настройка']).slice(0, 3).map(item => (
+                  <span
+                    key={item}
+                    style={{
+                      padding: '0.22rem 0.45rem',
+                      borderRadius: '999px',
+                      background: 'var(--surface-elevated)',
+                      color: 'var(--text-soft)',
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      border: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    {item}
+                  </span>
+                ))}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <Button
                 type="button"
                 tone="secondary"
@@ -894,114 +924,137 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
               >
                 Сбросить
               </Button>
-              <Button type="button" tone="primary" size="sm" onClick={() => setShowScenarios(prev => !prev)} style={{ boxShadow: 'none' }}>
-                {showScenarios ? 'Скрыть' : 'Показать'}
+              <Button type="button" tone="secondary" size="sm" onClick={() => setShowScenarios(prev => !prev)} style={{ boxShadow: 'none' }}>
+                {showScenarios ? 'Закрыть' : 'Выбрать сценарий'}
               </Button>
             </div>
           </div>
 
-          {showScenarios && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginTop: '0.85rem' }}>
-              {DEMO_SCENARIOS.map(scenario => {
-                const selected =
-                  config.appName === scenario.config.appName &&
-                  config.workloadType === scenario.config.workloadType &&
-                  config.imageTag === scenario.config.imageTag
+          <div
+            style={{
+              position: 'absolute',
+              top: 'calc(100% + 0.55rem)',
+              right: '0.95rem',
+              width: 'min(760px, calc(100vw - 4rem))',
+              padding: showScenarios ? '0.8rem' : '0',
+              borderRadius: '1rem',
+              border: showScenarios ? '1px solid var(--border-subtle)' : '1px solid transparent',
+              background: 'var(--surface-base)',
+              boxShadow: showScenarios ? 'var(--shadow-soft)' : 'none',
+              display: 'grid',
+              gap: '0.65rem',
+              maxHeight: showScenarios ? '520px' : '0',
+              opacity: showScenarios ? 1 : 0,
+              overflow: 'hidden',
+              pointerEvents: showScenarios ? 'auto' : 'none',
+              transform: showScenarios ? 'translateY(0)' : 'translateY(-6px)',
+              transition: 'max-height 0.28s ease, opacity 0.22s ease, transform 0.22s ease, padding 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease',
+              zIndex: 20,
+            }}
+          >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', paddingBottom: '0.2rem' }}>
+                <div>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text)' }}>Стартовые сценарии</div>
+                  <div style={{ marginTop: '0.15rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Примени готовую конфигурацию и доработай её в форме.
+                  </div>
+                </div>
+                <Button type="button" tone="secondary" size="sm" onClick={() => setShowScenarios(false)} style={{ boxShadow: 'none' }}>
+                  Закрыть
+                </Button>
+              </div>
 
-                return (
-                  <button
-                    key={scenario.id}
-                    type="button"
-                    onClick={() => applyScenario(scenario)}
-                    style={{
-                      textAlign: 'left',
-                      border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                      background: selected ? 'var(--accent-soft)' : 'var(--surface-elevated)',
-                      borderRadius: '0.8rem',
-                      padding: '0.9rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.65rem',
-                      boxShadow: selected ? 'var(--shadow)' : 'none',
-                      transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)' }}>{scenario.title}</div>
-                      <div style={{ marginTop: '0.25rem', fontSize: '0.77rem', lineHeight: 1.45, color: 'var(--text-muted)' }}>{scenario.summary}</div>
-                    </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.55rem' }}>
+                {DEMO_SCENARIOS.map(scenario => {
+                  const selected =
+                    config.appName === scenario.config.appName &&
+                    config.workloadType === scenario.config.workloadType &&
+                    config.imageTag === scenario.config.imageTag
 
-                    <div style={{ display: 'grid', gap: '0.45rem' }}>
+                  return (
+                    <button
+                      key={scenario.id}
+                      type="button"
+                      onClick={() => applyScenario(scenario)}
+                      style={{
+                        textAlign: 'left',
+                        border: `1px solid ${selected ? 'color-mix(in srgb, var(--accent) 45%, var(--border-subtle) 55%)' : 'var(--border-subtle)'}`,
+                        background: selected ? 'color-mix(in srgb, var(--accent-soft) 48%, var(--surface-elevated) 52%)' : 'var(--surface-elevated)',
+                        borderRadius: '0.8rem',
+                        padding: '0.75rem 0.8rem',
+                        cursor: 'pointer',
+                        display: 'grid',
+                        gap: '0.4rem',
+                        transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease',
+                      }}
+                    >
                       <div>
-                        <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          Что показывает
-                        </div>
-                        <div style={{ marginTop: '0.15rem', fontSize: '0.75rem', lineHeight: 1.45, color: 'var(--text-soft)' }}>
-                          {scenario.goal}
+                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text)' }}>{scenario.title}</div>
+                        <div style={{ marginTop: '0.18rem', fontSize: '0.74rem', lineHeight: 1.4, color: 'var(--text-muted)' }}>
+                          {scenario.summary}
                         </div>
                       </div>
-                      <div>
-                        <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          Что проверить
-                        </div>
-                        <div style={{ marginTop: '0.15rem', fontSize: '0.75rem', lineHeight: 1.45, color: 'var(--text-soft)' }}>
-                          {scenario.expected}
-                        </div>
-                      </div>
-                    </div>
 
-                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                      {scenario.highlights.map(item => (
-                        <span
-                          key={item}
-                          style={{
-                            padding: '0.28rem 0.5rem',
-                            borderRadius: '999px',
-                            background: 'var(--surface-contrast)',
-                            color: 'var(--text-soft)',
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                          }}
-                        >
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          )}
+                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignSelf: 'end' }}>
+                        {scenario.highlights.slice(0, 3).map(item => (
+                          <span
+                            key={item}
+                            style={{
+                              padding: '0.26rem 0.48rem',
+                              borderRadius: '999px',
+                              background: 'var(--surface-contrast)',
+                              color: 'var(--text-soft)',
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {item}
+                          </span>
+                        ))}
+                        {scenario.highlights.length > 3 && (
+                          <span
+                            style={{
+                              padding: '0.26rem 0.48rem',
+                              borderRadius: '999px',
+                              background: 'var(--surface-muted)',
+                              color: 'var(--text-muted)',
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                            }}
+                          >
+                            +{scenario.highlights.length - 3}
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: '0.73rem', color: 'var(--accent-contrast)', fontWeight: 700 }}>
+                        Применить
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+          </div>
         </div>
 
         <div
           ref={workflowCardRef}
           style={{
             ...card,
-            padding: '1.05rem 1.1rem',
+            padding: '0.9rem 0.95rem',
             display: 'grid',
-            gap: '1rem',
-            background: 'linear-gradient(180deg, var(--surface-base) 0%, var(--surface-muted) 100%)',
+            gap: '0.75rem',
+            background: 'var(--surface-base)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Поток работы</div>
-              <div style={{ marginTop: '0.3rem', fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Сначала подготовь конфигурацию, затем собери chart и только после этого запускай проверку.
+              <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Рабочая область
               </div>
+              <div style={{ marginTop: '0.18rem', fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>Поток работы</div>
             </div>
             <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
-              <span style={{ ...stepChipBase, background: 'var(--surface-elevated)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
-                {isDraftDirty
-                  ? 'Есть изменения'
-                  : reviewReady
-                    ? 'Готов к скачиванию'
-                    : generatedChartId
-                      ? 'Чарт создан'
-                      : 'Черновик'}
-              </span>
               <Button
                 type="button"
                 tone="secondary"
@@ -1024,17 +1077,29 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                 size="sm"
                 onClick={primaryToolbarAction.onClick}
                 disabled={primaryToolbarAction.disabled}
-                style={{
-                  borderRadius: '999px',
-                  animation: primaryToolbarAction.disabled ? undefined : 'pulseGlow 2.8s ease-out infinite',
-                }}
+                style={{ borderRadius: '999px' }}
               >
-                {primaryToolbarAction.label}
+                {primaryToolbarAction.key === 'generate'
+                  ? (isDraftDirty ? 'Обновить chart' : 'Собрать chart')
+                  : primaryToolbarAction.key === 'validate'
+                    ? 'Проверить chart'
+                    : primaryToolbarAction.label}
               </Button>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.7rem' }}>
+          <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ ...stepChipBase, background: Object.keys(formErrors).length > 0 ? 'var(--danger-soft)' : isDraftDirty ? 'var(--warning-soft)' : validation?.valid ? 'var(--success-soft)' : 'var(--surface-muted)', color: Object.keys(formErrors).length > 0 ? 'var(--danger)' : isDraftDirty ? 'var(--warning)' : validation?.valid ? 'var(--success)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+              {workspaceSummary}
+            </span>
+            {generatedChartId && (
+              <span style={{ ...stepChipBase, background: 'var(--surface-elevated)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                ID chart #{generatedChartId}
+              </span>
+            )}
+          </div>
+
+          <div className="workflow-steps">
             {progressItems.map(item => (
               <button
                 key={item.key}
@@ -1042,7 +1107,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                 onClick={item.onClick}
                 disabled={item.disabled}
                 style={{
-                  padding: '0.8rem 0.85rem',
+                  padding: '0.72rem 0.78rem',
                   borderRadius: '0.85rem',
                   border: `1px solid ${item.done ? 'color-mix(in srgb, var(--success) 30%, var(--border-subtle) 70%)' : item.active ? 'color-mix(in srgb, var(--accent) 30%, var(--border-subtle) 70%)' : 'var(--border-subtle)'}`,
                   background: item.done ? 'color-mix(in srgb, var(--success-soft) 55%, var(--surface-elevated) 45%)' : item.active ? 'var(--surface-elevated)' : 'var(--surface-base)',
@@ -1073,396 +1138,336 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   </span>
                   <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text)' }}>{item.label}</span>
                 </div>
-                <div style={{ marginTop: '0.45rem', fontSize: '0.74rem', color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)' }}>
+                <div style={{ marginTop: '0.32rem', fontSize: '0.73rem', color: item.done ? 'var(--success)' : item.active ? 'var(--accent-contrast)' : 'var(--text-muted)' }}>
                   {item.state}
                 </div>
               </button>
             ))}
           </div>
 
-          <RecommendationsBlock config={deferredConfig} />
-
-          <div
-            style={{
-              padding: '0.9rem 1rem',
-              borderRadius: '0.9rem',
-              background: 'var(--surface-elevated)',
-              border: '1px solid var(--border-subtle)',
-              display: 'grid',
-              gap: '0.65rem',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.8)',
-            }}
-          >
-            <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Контекст
-            </div>
-            <div style={{ fontSize: '0.82rem', color: Object.keys(formErrors).length > 0 ? 'var(--danger)' : 'var(--text-muted)', lineHeight: 1.5 }}>
-              {Object.keys(formErrors).length > 0
-                ? 'Исправьте ошибки в форме, чтобы перейти к генерации Helm-чарта.'
-                : latestResultSummary}
-            </div>
-            {secondaryToolbarActions.length > 0 && (
-              <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
-                {secondaryToolbarActions.map(action => (
-                  <button
-                    key={action.key}
-                    type="button"
-                    onClick={action.onClick}
-                    disabled={action.disabled}
-                    style={{
-                      borderRadius: '0.75rem',
-                      padding: '0.7rem 0.9rem',
-                      fontSize: '0.84rem',
-                      fontWeight: 700,
-                      cursor: action.disabled ? 'not-allowed' : 'pointer',
-                      opacity: action.disabled ? 0.5 : 1,
-                      background: action.tone === 'success' ? 'var(--success-soft)' : 'var(--surface-base)',
-                      color: action.tone === 'success' ? 'var(--success)' : 'var(--text-soft)',
-                      border: action.tone === 'success'
-                        ? '1px solid color-mix(in srgb, var(--success) 35%, transparent)'
-                        : '1px solid var(--border-subtle)',
-                      backgroundImage: action.tone === 'success'
-                        ? 'linear-gradient(90deg, var(--success-soft), color-mix(in srgb, var(--success-soft) 65%, white 35%), var(--success-soft))'
-                        : undefined,
-                      backgroundSize: action.tone === 'success' ? '200% 100%' : undefined,
-                      animation: action.tone === 'success' ? 'shimmer 5s linear infinite' : undefined,
-                    }}
-                  >
-                    {action.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            {generatedChartId && (
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-                Рендер и dry-run доступны на отдельной странице deploy.
-              </div>
-            )}
-            {isDraftDirty && (
-              <div style={{ fontSize: '0.78rem', color: 'var(--warning)', lineHeight: 1.45 }}>
-                После правок нужен новый запуск сборки.
-              </div>
-            )}
-          </div>
-
-          <OperationStatePanel
-            state={status === 'loading' || isValidating ? 'running' : status === 'error' || actionNote?.tone === 'error' ? 'error' : actionNote?.tone === 'success' ? 'success' : 'idle'}
-            title="Состояние операции"
-            message={actionNote?.text || latestResultSummary}
-            meta={
-              status === 'loading'
-                ? 'Собираем chart и обновляем рабочий артефакт.'
-                : isValidating
-                ? 'Идёт встроенная проверка и helm lint.'
-                  : generatedChartId
-                    ? `Текущий chart id: ${generatedChartId}`
-                    : 'Пока операции не запускались.'
-            }
-          />
-
-          <div
-            style={{
-              ...card,
-              padding: '1rem 1.05rem',
-              display: 'grid',
-              gap: '0.75rem',
-              background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 96%, white 4%) 0%, var(--surface-base) 100%)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Артефакты сборки
-                </div>
-                <div style={{ marginTop: '0.24rem', fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
-                  Предпросмотр и проверка chart
-                </div>
-                <div style={{ marginTop: '0.28rem', fontSize: '0.83rem', color: 'var(--text-muted)', lineHeight: 1.55, maxWidth: '760px' }}>
-                  YAML и lint открываются в отдельной широкой панели, чтобы код было реально удобно читать, а не пытаться смотреть его в узкой колонке.
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
-                <Button
-                  type="button"
-                  tone="primary"
-                  size="sm"
-                  onClick={() => {
-                    setWorkspaceSection('preview')
-                    setPreviewDrawerOpen(true)
-                  }}
-                >
-                  Открыть предпросмотр
-                </Button>
-                <Button
-                  type="button"
-                  tone="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setWorkspaceSection('lint')
-                    setPreviewDrawerOpen(true)
-                  }}
-                  disabled={!canUseBuiltArtifact}
-                >
-                  Открыть lint
-                </Button>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', flexWrap: 'wrap', alignItems: 'center', paddingTop: '0.2rem', borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', minWidth: 0 }}>
               <span style={{ ...stepChipBase, background: generatedChartId ? 'var(--success-soft)' : 'var(--surface-muted)', color: generatedChartId ? 'var(--success)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
-                {generatedChartId ? 'YAML собран' : 'YAML ещё не собран'}
+                {generatedChartId ? 'Манифест готов' : 'Манифест ещё не собран'}
               </span>
               <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
-                {validation ? (validation.valid ? 'Lint пройден' : 'Lint с ошибками') : 'Lint ещё не запускался'}
+                {validation ? (validation.valid ? 'Проверка пройдена' : 'Проверка с ошибками') : 'Проверка не запускалась'}
               </span>
-              <span style={{ ...stepChipBase, background: 'var(--surface-elevated)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
-                {workspaceSection === 'preview' ? 'Фокус: Preview' : 'Фокус: Lint'}
-              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button
+                type="button"
+                tone="secondary"
+                size="sm"
+                onClick={() => {
+                  setWorkspaceSection('preview')
+                  setPreviewDrawerOpen(true)
+                }}
+              >
+                Смотреть манифест
+              </Button>
+              {secondaryToolbarActions.slice(0, 1).map(action => (
+                <Button
+                  key={action.key}
+                  type="button"
+                  tone={action.tone === 'success' ? 'success' : 'secondary'}
+                  size="sm"
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                >
+                  {action.label}
+                </Button>
+              ))}
             </div>
           </div>
         </div>
 
-        <div ref={formCardRef} style={card}>
-          <p style={sectionTitle}>Основные параметры</p>
-          <p style={sectionHint}>Базовые данные chart: проект, имя приложения, образ и сетевые порты.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            <Grid2>
-              <Field label="Проект">
-                <div>
-                  <select
-                    style={{
-                      ...input,
-                      border: formErrors.projectId ? '1px solid var(--danger)' : input.border,
-                    }}
-                    value={selectedProjectId ?? ''}
-                    onChange={event => {
-                      const raw = event.target.value
-                      setSelectedProjectId(raw ? Number(raw) : null)
-                      setFormErrors(prev => {
-                        const next = { ...prev }
-                        delete next.projectId
-                        return next
-                      })
-                    }}
-                    disabled={isLoadingProjects}
-                  >
-                    <option value="">
-                      {isLoadingProjects ? 'Загружаем проекты...' : 'Выберите проект'}
-                    </option>
-                    {projects.map(project => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.55rem' }}>
-                    <input
-                      style={input}
-                      placeholder="Новый проект, например orders-platform"
-                      value={newProjectName}
-                      onChange={event => setNewProjectName(event.target.value)}
-                    />
-                    <Button type="button" tone="secondary" onClick={() => void handleCreateProject()} disabled={isCreatingProject} style={{ whiteSpace: 'nowrap' }}>
-                      {isCreatingProject ? 'Создание...' : 'Создать'}
-                    </Button>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div style={{ flex: '1 1 760px', display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '0' }}>
+            <div ref={formCardRef} style={card}>
+              <p style={sectionTitle}>Основные параметры</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                <div style={{ ...nestedPanel, marginTop: 0, display: 'grid', gap: '0.7rem' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Идентичность chart
                   </div>
-                  {formErrors.projectId && (
-                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
-                      {formErrors.projectId}
-                    </div>
-                  )}
-                </div>
-              </Field>
-              <Field label="Название приложения">
-                <div>
-                  <input
-                    style={{
-                      ...input,
-                      border: formErrors.appName ? '1px solid var(--danger)' : input.border,
-                    }}
-                    placeholder="myapp"
-                    value={config.appName}
-                    onChange={e => set('appName', e.target.value)}
-                  />
-                  {formErrors.appName && (
-                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
-                      {formErrors.appName}
-                    </div>
-                  )}
-                </div>
-              </Field>
-              <Field label="Версия чарта">
-                <div>
-                  <input
-                    style={{ ...input, border: formErrors.version ? '1px solid var(--danger)' : input.border }}
-                    placeholder="0.1.0"
-                    value={config.version}
-                    onChange={e => set('version', e.target.value)}
-                  />
-                  {formErrors.version && (
-                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
-                      {formErrors.version}
-                    </div>
-                  )}
-                </div>
-              </Field>
-            </Grid2>
-            <Grid2>
-              <Field label="Docker образ">
-                <div>
-                  <input
-                    style={{ ...input, border: formErrors.image ? '1px solid var(--danger)' : input.border }}
-                    placeholder="nginx"
-                    value={config.image}
-                    onChange={e => set('image', e.target.value)}
-                  />
-                  {formErrors.image && (
-                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
-                      {formErrors.image}
-                    </div>
-                  )}
-                </div>
-              </Field>
-              <Field label="Тег образа">
-                <div>
-                  <input
-                    style={{ ...input, border: formErrors.imageTag ? '1px solid var(--danger)' : input.border }}
-                    placeholder="latest"
-                    value={config.imageTag}
-                    onChange={e => set('imageTag', e.target.value)}
-                  />
-                  {formErrors.imageTag && (
-                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
-                      {formErrors.imageTag}
-                    </div>
-                  )}
-                </div>
-              </Field>
-            </Grid2>
-            <Grid2>
-              <Field label="Количество реплик">
-                <input
-                  style={{ ...input, opacity: config.workloadType === 'DaemonSet' ? 0.4 : 1 }}
-                  type="number"
-                  min={1}
-                  value={config.replicas}
-                  disabled={config.workloadType === 'DaemonSet'}
-                  onChange={e => set('replicas', Math.max(1, Number(e.target.value)))}
-                />
-              </Field>
-              <Field label="Порт контейнера">
-                <div>
-                  <input
-                    style={{ ...input, border: formErrors.containerPort ? '1px solid var(--danger)' : input.border }}
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={config.containerPort}
-                    onChange={e => set('containerPort', Number(e.target.value))}
-                  />
-                  {formErrors.containerPort && (
-                    <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
-                      {formErrors.containerPort}
-                    </div>
-                  )}
-                </div>
-              </Field>
-            </Grid2>
-          </div>
-        </div>
-        <div ref={advancedCardRef} style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <div>
-              <p style={sectionTitle}>Продвинутые настройки</p>
-              <p style={sectionHint}>
-                Службы, ingress, ресурсы и нетиповой workload. Для быстрого старта можно оставить значения по умолчанию.
-              </p>
-            </div>
-            <Button type="button" tone="secondary" size="sm" onClick={() => setShowAdvanced(prev => !prev)}>
-              {showAdvanced ? 'Скрыть настройки' : hasAdvancedOverrides ? 'Изменить настройки' : 'Показать настройки'}
-            </Button>
-          </div>
-
-          <div style={{ marginTop: '-0.1rem' }}>
-            {advancedSummary.length > 0 ? (
-              <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                {advancedSummary.map(item => (
-                  <span
-                    key={item}
-                    style={{
-                      padding: '0.28rem 0.55rem',
-                      borderRadius: '999px',
-                      background: 'var(--accent-soft)',
-                      color: 'var(--accent-contrast)',
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-                Используются значения по умолчанию: `Deployment`, `Service ClusterIP`, без `Ingress` и без `Resource Limits`.
-              </div>
-            )}
-          </div>
-
-          {showAdvanced && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-              <div style={{ ...nestedPanel, marginTop: 0 }}>
-                <p style={{ ...sectionTitle, marginBottom: '0.3rem' }}>Тип Workload</p>
-                <p style={{ ...sectionHint, marginBottom: '0.85rem' }}>Выбери модель запуска. Это влияет на реплики, сетевое поведение и дальнейшие рекомендации.</p>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  {WORKLOAD_TYPES.map(type => (
-                    <WorkloadCard
-                      key={type}
-                      type={type}
-                      selected={config.workloadType === type}
-                      onSelect={() => {
-                        setShowAdvanced(true)
-                        set('workloadType', type)
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ ...nestedPanel, marginTop: 0 }}>
-                <p style={{ ...sectionTitle, marginBottom: '0.3rem' }}>Сетевые ресурсы</p>
-                <p style={{ ...sectionHint, marginBottom: '0.85rem' }}>Подключай только те сущности, которые реально нужны приложению.</p>
-
-                <div>
-                  <ToggleSwitch checked={config.service.enabled} onChange={v => setService('enabled', v)} label="Service" />
-                  {config.service.enabled && (
-                    <div style={{ ...nestedPanel, display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                      <Field label="Порт">
-                        <div>
+                  <ResponsiveGrid>
+                    <FormField label="Проект">
+                      <div>
+                        <select
+                          style={{
+                            ...input,
+                            border: formErrors.projectId ? '1px solid var(--danger)' : input.border,
+                          }}
+                          value={selectedProjectId ?? ''}
+                          onChange={event => {
+                            const raw = event.target.value
+                            setSelectedProjectId(raw ? Number(raw) : null)
+                            setFormErrors(prev => {
+                              const next = { ...prev }
+                              delete next.projectId
+                              return next
+                            })
+                          }}
+                          disabled={isLoadingProjects}
+                        >
+                          <option value="">
+                            {isLoadingProjects ? 'Загружаем проекты...' : 'Выберите проект'}
+                          </option>
+                          {projects.map(project => (
+                            <option key={project.id} value={project.id}>
+                              {project.name}
+                            </option>
+                          ))}
+                        </select>
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.45rem' }}>
                           <input
-                            style={{ ...input, width: '120px', border: formErrors.servicePort ? '1px solid var(--danger)' : input.border }}
-                            type="number"
-                            value={config.service.port}
-                            onChange={e => setService('port', Number(e.target.value))}
+                            style={input}
+                            placeholder="Новый проект, например orders-platform"
+                            value={newProjectName}
+                            onChange={event => setNewProjectName(event.target.value)}
                           />
-                          {formErrors.servicePort && (
-                            <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)', maxWidth: '180px' }}>
-                              {formErrors.servicePort}
-                            </div>
-                          )}
+                          <Button type="button" tone="secondary" onClick={() => void handleCreateProject()} disabled={isCreatingProject} style={{ whiteSpace: 'nowrap' }}>
+                            {isCreatingProject ? 'Создание...' : 'Создать'}
+                          </Button>
                         </div>
-                      </Field>
-                      <div style={{ flex: 1, minWidth: '240px' }}>
-                        <label style={fieldLabel}>Тип Service</label>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          {SERVICE_TYPES.map(t => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => setService('type', t)}
-                              style={{
-                                flex: '1 1 120px',
-                                padding: '0.5rem',
-                                border: `2px solid ${config.service.type === t ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                        {formErrors.projectId && (
+                          <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                            {formErrors.projectId}
+                          </div>
+                        )}
+                      </div>
+                    </FormField>
+                    <FormField label="Название приложения">
+                      <div>
+                        <input
+                          style={{
+                            ...input,
+                            border: formErrors.appName ? '1px solid var(--danger)' : input.border,
+                          }}
+                          placeholder="myapp"
+                          value={config.appName}
+                          onChange={e => set('appName', e.target.value)}
+                        />
+                        {formErrors.appName && (
+                          <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                            {formErrors.appName}
+                          </div>
+                        )}
+                      </div>
+                    </FormField>
+                    <FormField label="Версия чарта">
+                      <div>
+                        <input
+                          style={{ ...input, border: formErrors.version ? '1px solid var(--danger)' : input.border }}
+                          placeholder="0.1.0"
+                          value={config.version}
+                          onChange={e => set('version', e.target.value)}
+                        />
+                        {formErrors.version && (
+                          <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                            {formErrors.version}
+                          </div>
+                        )}
+                      </div>
+                    </FormField>
+                  </ResponsiveGrid>
+                </div>
+
+                <div style={{ ...nestedPanel, marginTop: 0, display: 'grid', gap: '0.7rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Контейнер и запуск
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                      <span style={{ ...stepChipBase, padding: '0.34rem 0.58rem', background: 'var(--surface-base)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                        {config.workloadType}
+                      </span>
+                      <span style={{ ...stepChipBase, padding: '0.34rem 0.58rem', background: 'var(--surface-base)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                        Порт {config.containerPort}
+                      </span>
+                    </div>
+                  </div>
+                  <ResponsiveGrid>
+                    <FormField label="Docker образ">
+                      <div>
+                        <input
+                          style={{ ...input, border: formErrors.image ? '1px solid var(--danger)' : input.border }}
+                          placeholder="nginx"
+                          value={config.image}
+                          onChange={e => set('image', e.target.value)}
+                        />
+                        {formErrors.image && (
+                          <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                            {formErrors.image}
+                          </div>
+                        )}
+                      </div>
+                    </FormField>
+                    <FormField label="Тег образа">
+                      <div>
+                        <input
+                          style={{ ...input, border: formErrors.imageTag ? '1px solid var(--danger)' : input.border }}
+                          placeholder="latest"
+                          value={config.imageTag}
+                          onChange={e => set('imageTag', e.target.value)}
+                        />
+                        {formErrors.imageTag && (
+                          <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                            {formErrors.imageTag}
+                          </div>
+                        )}
+                      </div>
+                    </FormField>
+                  </ResponsiveGrid>
+                  <ResponsiveGrid>
+                    <FormField label="Количество реплик">
+                      <input
+                        style={{ ...input, opacity: config.workloadType === 'DaemonSet' ? 0.4 : 1 }}
+                        type="number"
+                        min={1}
+                        value={config.replicas}
+                        disabled={config.workloadType === 'DaemonSet'}
+                        onChange={e => set('replicas', Math.max(1, Number(e.target.value)))}
+                      />
+                    </FormField>
+                    <FormField label="Порт контейнера">
+                      <div>
+                        <input
+                          style={{ ...input, border: formErrors.containerPort ? '1px solid var(--danger)' : input.border }}
+                          type="number"
+                          min={1}
+                          max={65535}
+                          value={config.containerPort}
+                          onChange={e => set('containerPort', Number(e.target.value))}
+                        />
+                        {formErrors.containerPort && (
+                          <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                            {formErrors.containerPort}
+                          </div>
+                        )}
+                      </div>
+                    </FormField>
+                  </ResponsiveGrid>
+                </div>
+              </div>
+            </div>
+
+            <div ref={advancedCardRef} style={card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <div>
+                  <p style={sectionTitle}>Продвинутые настройки</p>
+                </div>
+                <Button type="button" tone="secondary" size="sm" onClick={() => setShowAdvanced(prev => !prev)}>
+                  {showAdvanced ? 'Скрыть настройки' : hasAdvancedOverrides ? 'Изменить настройки' : 'Показать настройки'}
+                </Button>
+              </div>
+
+              <div style={{ marginTop: '-0.1rem' }}>
+                {advancedSummary.length > 0 ? (
+                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                    {advancedSummary.map(item => (
+                      <span
+                        key={item}
+                        style={{
+                          padding: '0.28rem 0.55rem',
+                          borderRadius: '999px',
+                          background: 'var(--accent-soft)',
+                          color: 'var(--accent-contrast)',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                    Используются значения по умолчанию.
+                  </div>
+                )}
+              </div>
+
+              {showAdvanced && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginTop: '0.85rem' }}>
+                  <div style={{ ...capabilityPanel, marginTop: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Режим
+                        </div>
+                        <p style={{ ...sectionTitle, marginBottom: '0.1rem' }}>Тип workload</p>
+                        <p style={{ ...sectionHint, marginBottom: 0 }}>Определи модель запуска chart: без состояния, stateful или агент на каждой ноде.</p>
+                      </div>
+                      <span style={{ ...stepChipBase, padding: '0.34rem 0.58rem', background: 'var(--surface-base)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                        {config.workloadType}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      {WORKLOAD_TYPES.map(type => (
+                        <WorkloadCard
+                          key={type}
+                          type={type}
+                          selected={config.workloadType === type}
+                          onSelect={() => {
+                            setShowAdvanced(true)
+                            set('workloadType', type)
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ ...capabilityPanel, marginTop: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Режим
+                        </div>
+                        <p style={{ ...sectionTitle, marginBottom: '0.1rem' }}>Сеть</p>
+                        <p style={{ ...sectionHint, marginBottom: 0 }}>Включай только те сетевые сущности, которые реально нужны приложению.</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        {networkingSummary.map(item => (
+                          <span key={item} style={{ ...stepChipBase, padding: '0.34rem 0.58rem', background: 'var(--surface-base)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <ToggleSwitch checked={config.service.enabled} onChange={v => setService('enabled', v)} label="Service" />
+                      {config.service.enabled && (
+                        <div style={{ ...nestedPanel, display: 'flex', gap: '0.85rem', flexWrap: 'wrap' }}>
+                          <FormField label="Порт">
+                            <div>
+                              <input
+                                style={{ ...input, width: '120px', border: formErrors.servicePort ? '1px solid var(--danger)' : input.border }}
+                                type="number"
+                                value={config.service.port}
+                                onChange={e => setService('port', Number(e.target.value))}
+                              />
+                              {formErrors.servicePort && (
+                                <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: 'var(--danger)', maxWidth: '180px' }}>
+                                  {formErrors.servicePort}
+                                </div>
+                              )}
+                            </div>
+                          </FormField>
+                          <div style={{ flex: 1, minWidth: '240px' }}>
+                            <label className="form-field__label">Тип Service</label>
+                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              {SERVICE_TYPES.map(t => (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  onClick={() => setService('type', t)}
+                                  style={{
+                                    flex: '1 1 120px',
+                                    padding: '0.5rem',
+                                    border: `2px solid ${config.service.type === t ? 'var(--accent)' : 'var(--border-subtle)'}`,
                                 borderRadius: '0.5rem',
                                 background: config.service.type === t ? 'var(--accent-soft)' : 'var(--surface-elevated)',
                                 color: config.service.type === t ? 'var(--accent-contrast)' : 'var(--text-muted)',
@@ -1486,8 +1491,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   <ToggleSwitch checked={config.ingress.enabled} onChange={v => setIngress('enabled', v)} label="Ingress" />
                   {config.ingress.enabled && (
                     <div style={nestedPanel}>
-                      <Grid2>
-                        <Field label="Хост">
+                      <ResponsiveGrid>
+                        <FormField label="Хост">
                           <div>
                             <input
                               style={{ ...input, border: formErrors.ingressHost ? '1px solid var(--danger)' : input.border }}
@@ -1501,8 +1506,8 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                               </div>
                             )}
                           </div>
-                        </Field>
-                        <Field label="Путь">
+                        </FormField>
+                        <FormField label="Путь">
                           <div>
                             <input
                               style={{ ...input, border: formErrors.ingressPath ? '1px solid var(--danger)' : input.border }}
@@ -1516,53 +1521,104 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                               </div>
                             )}
                           </div>
-                        </Field>
-                      </Grid2>
+                        </FormField>
+                      </ResponsiveGrid>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div style={{ ...nestedPanel, marginTop: 0 }}>
-                <ToggleSwitch checked={config.resources.enabled} onChange={v => setResources('enabled', v)} label="Resource Limits" />
+              <div style={{ ...capabilityPanel, marginTop: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Режим
+                    </div>
+                    <p style={{ ...sectionTitle, marginBottom: '0.1rem' }}>Ресурсы</p>
+                    <p style={{ ...sectionHint, marginBottom: 0 }}>Requests и limits помогают сделать workload предсказуемым при проверке и deploy.</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    {resourcesSummary.map(item => (
+                      <span key={item} style={{ ...stepChipBase, padding: '0.34rem 0.58rem', background: 'var(--surface-base)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <ToggleSwitch checked={config.resources.enabled} onChange={v => setResources('enabled', v)} label="Лимиты ресурсов" />
                 {config.resources.enabled && (
-                  <div style={{ ...nestedPanel, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ ...nestedPanel, display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                     <div>
                       <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>REQUESTS</p>
-                      <Grid2>
-                        <Field label="CPU">
+                      <ResponsiveGrid>
+                        <FormField label="CPU">
                           <input style={input} placeholder="100m" value={config.resources.requests.cpu} onChange={e => setResourcesNested('requests', 'cpu', e.target.value)} />
-                        </Field>
-                        <Field label="Memory">
+                        </FormField>
+                        <FormField label="Memory">
                           <input style={input} placeholder="128Mi" value={config.resources.requests.memory} onChange={e => setResourcesNested('requests', 'memory', e.target.value)} />
-                        </Field>
-                      </Grid2>
+                        </FormField>
+                      </ResponsiveGrid>
                     </div>
                     <div>
                       <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>LIMITS</p>
-                      <Grid2>
-                        <Field label="CPU">
+                      <ResponsiveGrid>
+                        <FormField label="CPU">
                           <input style={input} placeholder="500m" value={config.resources.limits.cpu} onChange={e => setResourcesNested('limits', 'cpu', e.target.value)} />
-                        </Field>
-                        <Field label="Memory">
+                        </FormField>
+                        <FormField label="Memory">
                           <input style={input} placeholder="512Mi" value={config.resources.limits.memory} onChange={e => setResourcesNested('limits', 'memory', e.target.value)} />
-                        </Field>
-                      </Grid2>
+                        </FormField>
+                      </ResponsiveGrid>
                     </div>
                   </div>
                 )}
               </div>
+
+              <div style={{ ...capabilityPanel, marginTop: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Режим
+                    </div>
+                    <p style={{ ...sectionTitle, marginBottom: '0.1rem' }}>Профиль безопасности</p>
+                    <p style={{ ...sectionHint, marginBottom: 0 }}>Профиль безопасности пока формируется из выбранного сценария и текущих значений chart.</p>
+                  </div>
+                  <span style={{ ...stepChipBase, padding: '0.34rem 0.58rem', background: config.security.containerSecurityContext.privileged ? 'var(--danger-soft)' : 'var(--success-soft)', color: config.security.containerSecurityContext.privileged ? 'var(--danger)' : 'var(--success)', border: '1px solid var(--border-subtle)' }}>
+                    {config.security.containerSecurityContext.privileged ? 'Есть риск' : 'Усилено'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {securitySummary.map(item => (
+                    <span key={item} style={{ ...stepChipBase, padding: '0.34rem 0.58rem', background: 'var(--surface-base)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>
+          </div>
+          <aside
+            style={{
+              flex: '0 0 320px',
+              width: '320px',
+              maxWidth: '100%',
+              position: 'sticky',
+              top: '1rem',
+              alignSelf: 'flex-start',
+            }}
+          >
+            <RecommendationsBlock config={deferredConfig} variant="sidebar" />
+          </aside>
+        </div>
       </div>
-
     </div>
 
     {previewDrawerOpen && (
       <div
-        style={{
-          position: 'fixed',
+            style={{
+              position: 'fixed',
           inset: 0,
           zIndex: 50,
           display: 'flex',
@@ -1574,12 +1630,12 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
       >
         <div
           style={{
-            width: 'min(1080px, calc(100vw - 2rem))',
+            width: previewWide ? 'min(1440px, calc(100vw - 1rem))' : 'min(1120px, calc(100vw - 2rem))',
             height: '100vh',
-            background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 95%, white 5%) 0%, var(--surface-muted) 100%)',
+            background: 'var(--surface-muted)',
             borderLeft: '1px solid var(--border-subtle)',
             boxShadow: '-18px 0 42px rgba(15, 23, 42, 0.18)',
-            padding: '1rem',
+            padding: '0.9rem',
             overflow: 'auto',
             boxSizing: 'border-box',
             display: 'grid',
@@ -1595,7 +1651,11 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
               padding: '0.95rem 1rem',
               display: 'grid',
               gap: '0.75rem',
-              background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 96%, white 4%) 0%, var(--surface-base) 100%)',
+              background: 'var(--surface-base)',
+              position: 'sticky',
+              top: 0,
+              zIndex: 2,
+              backdropFilter: 'blur(12px)',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -1607,14 +1667,14 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                   {workspaceSection === 'preview' ? 'Предпросмотр манифеста' : 'Результат проверки chart'}
                 </div>
                 <div style={{ marginTop: '0.28rem', color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.55, maxWidth: '760px' }}>
-                  Здесь открывается широкий рабочий просмотр YAML и lint, чтобы код можно было читать и проверять без узкой боковой колонки.
+                  Это режим просмотра: изменения вносятся через форму, а здесь удобно читать результат.
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto' }}>
                   {([
-                    ['preview', 'Preview'],
-                    ['lint', 'Lint'],
+                    ['preview', 'Манифест'],
+                    ['lint', 'Проверка'],
                   ] as Array<[WorkspaceSection, string]>).map(([tab, label]) => {
                     const active = workspaceSection === tab
                     return (
@@ -1639,10 +1699,21 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
                     )
                   })}
                 </div>
+                <Button type="button" tone="secondary" size="sm" onClick={() => setPreviewWide(prev => !prev)}>
+                  {previewWide ? 'Обычная ширина' : 'Шире'}
+                </Button>
                 <Button type="button" tone="ghost" size="sm" onClick={() => setPreviewDrawerOpen(false)}>
                   Закрыть
                 </Button>
               </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+              <span style={{ ...stepChipBase, background: generatedChartId ? 'var(--success-soft)' : 'var(--surface-muted)', color: generatedChartId ? 'var(--success)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                {generatedChartId ? 'Чарт собран' : 'Чарт ещё не собран'}
+              </span>
+              <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>
+                {validation ? (validation.valid ? 'Проверка пройдена' : 'Проверка с ошибками') : 'Проверка ещё не запускалась'}
+              </span>
             </div>
           </div>
 
@@ -1652,6 +1723,7 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
               chartId={generatedChartId ?? undefined}
               chartName={config.appName || 'chart'}
               chartVersion={config.version}
+              drawerMode
             />
           )}
 
@@ -1660,17 +1732,17 @@ export default function GeneratorPage({ onChartReady, onOpenOps }: GeneratorPage
               style={{
                 background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 94%, white 6%) 0%, var(--surface-base) 100%)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: '1rem',
+                borderRadius: '1.15rem',
                 padding: '1rem 1.05rem',
-                boxShadow: '0 10px 28px rgba(15, 23, 42, 0.08)',
-                minHeight: '620px',
+                boxShadow: '0 18px 42px rgba(15, 23, 42, 0.12)',
+                minHeight: 'calc(100vh - 220px)',
               }}
             >
-              <div style={{ marginBottom: '1rem' }}>
+              <div style={{ marginBottom: '1rem', position: 'sticky', top: '5.95rem', zIndex: 1, paddingBottom: '0.7rem', background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 94%, white 6%) 0%, color-mix(in srgb, var(--surface-base) 92%, transparent 8%) 100%)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', marginBottom: '0.45rem' }}>
                   <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>Результат проверки</div>
                   <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-                    <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation?.engine === 'helm lint' ? 'helm lint' : validation?.engine === 'helm_lint' ? 'helm lint' : 'builtin'}</span>
+                    <span style={{ ...stepChipBase, background: 'var(--surface-muted)', color: 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation?.engine === 'helm lint' ? 'helm lint' : validation?.engine === 'helm_lint' ? 'helm lint' : 'встроенная проверка'}</span>
                     <span style={{ ...stepChipBase, background: validation?.valid ? 'var(--success-soft)' : validation ? 'var(--danger-soft)' : 'var(--surface-muted)', color: validation?.valid ? 'var(--success)' : validation ? 'var(--danger)' : 'var(--text-soft)', border: '1px solid var(--border-subtle)' }}>{validation ? (validation.valid ? 'Прошло' : 'Ошибка') : 'Ожидает'}</span>
                   </div>
                 </div>

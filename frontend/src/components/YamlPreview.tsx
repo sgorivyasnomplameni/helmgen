@@ -16,6 +16,7 @@ interface Props {
   chartId?: number
   chartName?: string
   chartVersion?: string
+  drawerMode?: boolean
 }
 
 const ALL_TABS: YamlTab[] = ['deployment.yaml', 'service.yaml', 'ingress.yaml', 'Chart.yaml']
@@ -35,7 +36,7 @@ function isTabDisabled(tab: YamlTab, config: ChartConfig): boolean {
   return false
 }
 
-export default function YamlPreview({ config, chartId, chartName, chartVersion }: Props) {
+export default function YamlPreview({ config, chartId, chartName, chartVersion, drawerMode = false }: Props) {
   const [activeTab, setActiveTab] = useState<YamlTab>('deployment.yaml')
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -49,7 +50,7 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
     if (isTabDisabled(activeTab, config)) {
       setActiveTab('deployment.yaml')
     }
-  }, [config.service.enabled, config.ingress.enabled, activeTab])
+  }, [activeTab, config])
 
   const content = getContent(activeTab, config)
 
@@ -62,39 +63,34 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
 
   return (
     <div
+      className={drawerMode ? 'yaml-preview yaml-preview--drawer' : 'yaml-preview'}
       style={{
-        background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 94%, white 6%) 0%, var(--surface-base) 100%)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: '1rem',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: expanded ? '760px' : '560px',
-        boxShadow: '0 10px 28px rgba(15, 23, 42, 0.08)',
+        minHeight: expanded ? (drawerMode ? 'calc(100vh - 220px)' : '760px') : drawerMode ? 'calc(100vh - 260px)' : '560px',
       }}
     >
       <div
-        style={{
-          padding: '1rem 1.1rem 0.9rem',
-          background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-base) 90%, white 10%) 0%, color-mix(in srgb, var(--surface-muted) 52%, white 48%) 100%)',
-          borderBottom: '1px solid var(--border-subtle)',
-        }}
+        className="yaml-preview__header"
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.85rem', marginBottom: '0.9rem', flexWrap: 'wrap' }}>
-          <div style={{ display: 'grid', gap: '0.32rem' }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.77rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+        <div className="yaml-preview__topline">
+          <div className="yaml-preview__title-block">
+            <span className="eyebrow">
               Результат
             </span>
-            <div style={{ color: 'var(--text)', fontSize: '1rem', fontWeight: 800 }}>
+            <div className="section-title">
               Предпросмотр манифеста
             </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.5 }}>
-              Проверяй структуру файлов chart до lint и deploy. Неактивные вкладки означают, что сущность ещё не включена в конфигурацию.
+            <div className="section-copy">
+              Только просмотр YAML и результатов проверки перед deploy.
             </div>
+            {drawerMode && (
+              <div className="chip-row">
+                <StatusPill tone="neutral">Только просмотр</StatusPill>
+                <StatusPill tone={chartId ? 'success' : 'neutral'}>{chartId ? 'Чарт сохранён' : 'Локальный просмотр'}</StatusPill>
+              </div>
+            )}
           </div>
 
-          <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <div className="action-row action-row--end">
             <Button type="button" tone={copied ? 'success' : 'secondary'} size="sm" onClick={handleCopy}>
               {copied ? 'Скопировано' : 'Скопировать'}
             </Button>
@@ -109,7 +105,7 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', alignItems: 'center' }}>
+        <div className="yaml-preview__tabs">
           {ALL_TABS.map(tab => {
             const disabled = isTabDisabled(tab, config)
             const active = activeTab === tab
@@ -118,38 +114,25 @@ export default function YamlPreview({ config, chartId, chartName, chartVersion }
                 key={tab}
                 onClick={() => !disabled && setActiveTab(tab)}
                 disabled={disabled}
-                style={{
-                  padding: '0.42rem 0.72rem',
-                  fontSize: '0.74rem',
-                  fontFamily: 'monospace',
-                  border: active ? '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' : '1px solid var(--border-subtle)',
-                  borderRadius: '999px',
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  background: active ? 'var(--accent-soft)' : 'color-mix(in srgb, var(--surface-elevated) 84%, white 16%)',
-                  color: disabled ? 'var(--text-muted)' : active ? 'var(--accent-contrast)' : 'var(--text-soft)',
-                  whiteSpace: 'nowrap',
-                  opacity: disabled ? 0.42 : 1,
-                }}
+                className={`yaml-preview__tab${active ? ' is-active' : ''}`}
               >
                 {tab}{disabled ? ' · не создан' : ''}
               </button>
             )
           })}
-          <StatusPill tone="dark" style={{ marginLeft: 'auto', flexShrink: 0 }}>
-            YAML
-          </StatusPill>
         </div>
       </div>
 
-      <div
-        style={{
-          flex: 1,
-          background: 'linear-gradient(180deg, color-mix(in srgb, var(--surface-muted) 85%, white 15%) 0%, var(--surface-muted) 100%)',
-          padding: '0.9rem',
-          overflow: 'auto',
-        }}
-      >
-        <CodeBlock minHeight={expanded ? 640 : 440} style={{ whiteSpace: 'pre' }}>
+      <div className="yaml-preview__body">
+        <div className="yaml-preview__meta">
+          <div className="eyebrow">
+            Только просмотр
+          </div>
+          <div className="muted-small">
+            Изменения вносятся через форму слева
+          </div>
+        </div>
+        <CodeBlock minHeight={expanded ? (drawerMode ? 760 : 640) : drawerMode ? 560 : 440} style={{ whiteSpace: 'pre', fontSize: drawerMode ? '0.84rem' : '0.8rem', lineHeight: drawerMode ? 1.78 : 1.72, cursor: 'default', userSelect: 'text' }}>
           {content}
         </CodeBlock>
       </div>

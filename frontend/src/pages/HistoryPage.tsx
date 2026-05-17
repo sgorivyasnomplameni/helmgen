@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AuditList from '@/components/AuditList'
 import Button from '@/components/Button'
 import OperationStatePanel from '@/components/OperationStatePanel'
@@ -14,7 +14,6 @@ import type { Project } from '@/types/project'
 const pageShell: React.CSSProperties = {
   maxWidth: '1200px',
   margin: '0 auto',
-  padding: '1.5rem',
 }
 
 const card: React.CSSProperties = {
@@ -71,7 +70,7 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [actionNote, setActionNote] = useState<{ tone: 'neutral' | 'success' | 'error'; text: string } | null>(null)
 
-  async function loadCharts() {
+  const loadCharts = useCallback(async () => {
     setLoading(true)
     setError(null)
     setActionNote({ tone: 'neutral', text: 'Загружаем историю Helm-чартов...' })
@@ -100,13 +99,13 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
 
   useEffect(() => {
     if (active) {
       void loadCharts()
     }
-  }, [active])
+  }, [active, loadCharts])
 
   async function handleDelete(chartId: number) {
     setDeletingId(chartId)
@@ -136,28 +135,21 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
   const projectNameById = new Map(projects.map(project => [project.id, project.name]))
 
   return (
-    <div style={pageShell}>
-      <div style={{ ...card, marginBottom: '1.25rem', padding: '1.15rem 1.2rem', background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface-base) 92%) 0%, var(--surface-base) 60%, color-mix(in srgb, var(--success) 4%, var(--surface-base) 96%) 100%)' }}>
+    <div className="page-shell" style={pageShell}>
+      <div style={{ ...card, marginBottom: '1rem', padding: '1rem 1.1rem', background: 'var(--surface-base)' }}>
         <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           Архив и действия
         </div>
         <h1 style={{ margin: '0.3rem 0 0', fontSize: '1.7rem', fontWeight: 900, color: 'var(--text)' }}>
           История чартов
         </h1>
-        <p style={{ margin: '0.35rem 0 0', color: 'var(--text-soft)', fontSize: '0.95rem', maxWidth: '760px', lineHeight: 1.6 }}>
+        <p style={{ margin: '0.35rem 0 0', color: 'var(--text-soft)', fontSize: '0.9rem', maxWidth: '760px', lineHeight: 1.5 }}>
           Архив ранее собранных chart с быстрым скачиванием, переходом к проверке и понятным статусом последнего состояния.
         </p>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.8fr) minmax(320px, 0.95fr)',
-          gap: '1rem',
-          alignItems: 'start',
-        }}
-      >
-        <div style={{ ...card, padding: '1rem' }}>
+      <div className="history-layout">
+        <div style={{ ...card, padding: '0.9rem' }}>
         <div
           style={{
             display: 'flex',
@@ -232,17 +224,17 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
               return (
                 <div
                   key={chart.id}
+                  className="history-chart-card"
                   data-testid="history-chart-item"
                   data-chart-name={chart.name}
                   style={{
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: '1rem',
-                    padding: '1rem 1.05rem',
+                    borderRadius: '0.9rem',
+                    padding: '0.9rem 0.95rem',
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr) auto',
-                    gap: '1rem',
+                    gap: '0.85rem',
                     alignItems: 'center',
-                    background: 'linear-gradient(180deg, var(--surface-base) 0%, var(--surface-muted) 100%)',
+                    background: 'var(--surface-base)',
                     transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
                   }}
                 >
@@ -260,10 +252,10 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                         </StatusPill>
                       )}
                     </div>
-                    <div style={{ marginTop: '0.45rem', color: 'var(--text-soft)', fontSize: '0.88rem' }}>
+                    <div style={{ marginTop: '0.28rem', color: 'var(--text-soft)', fontSize: '0.84rem' }}>
                       {chart.description || 'Описание не указано'}
                     </div>
-                    <div style={{ marginTop: '0.8rem', display: 'flex', gap: '0.55rem', flexWrap: 'wrap' }}>
+                    <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
                       <StatusPill tone="neutral">Проект: {chart.project_id ? (projectNameById.get(chart.project_id) || `#${chart.project_id}`) : 'Без проекта'}</StatusPill>
                       <StatusPill tone="neutral">Chart {chart.chart_version}</StatusPill>
                       <StatusPill tone="neutral">App {chart.app_version}</StatusPill>
@@ -278,13 +270,13 @@ export default function HistoryPage({ active = true, onOpenOps }: Props) {
                         </StatusPill>
                       )}
                     </div>
-                    <div style={{ marginTop: '0.7rem', display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+                    <div style={{ marginTop: '0.55rem', display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
                       <StatusPill tone="neutral">Создан: {formatDate(chart.created_at)}</StatusPill>
                       {chart.deployed_at && <StatusPill tone="neutral">Deploy: {formatDate(chart.deployed_at)}</StatusPill>}
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', alignSelf: 'start' }}>
+                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', alignSelf: 'start' }}>
                     {onOpenOps && (
                       <Button type="button" tone="secondary" size="sm" disabled={!isGenerated} onClick={() => onOpenOps(chart.id)}>
                         Проверка и deploy

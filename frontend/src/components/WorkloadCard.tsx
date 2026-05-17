@@ -33,8 +33,8 @@ const ICONS: Record<WorkloadType, JSX.Element> = {
 }
 
 const DESCRIPTIONS: Record<WorkloadType, string> = {
-  Deployment: 'Для stateless приложений. Rolling updates и rollback.',
-  StatefulSet: 'Для stateful приложений. Стабильные идентификаторы.',
+  Deployment: 'Для приложений без состояния. Плавные обновления и откат.',
+  StatefulSet: 'Для stateful-приложений. Стабильные идентификаторы.',
   DaemonSet: 'Запускается на каждой ноде кластера.',
 }
 
@@ -43,27 +43,13 @@ export default function WorkloadCard({ type, selected, onSelect }: Props) {
     <button
       type="button"
       onClick={onSelect}
-      style={{
-        flex: '1 1 180px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '0.45rem',
-        padding: '1rem 0.9rem',
-        border: `2px solid ${selected ? 'var(--accent)' : 'var(--border-subtle)'}`,
-        borderRadius: '0.75rem',
-        background: selected ? 'var(--accent-soft)' : 'var(--surface-base)',
-        cursor: 'pointer',
-        transition: 'all 0.15s',
-        color: selected ? 'var(--accent-contrast)' : 'var(--text-muted)',
-        textAlign: 'center',
-      }}
+      className={selected ? 'workload-card is-selected' : 'workload-card'}
     >
-      <div style={{ color: selected ? 'var(--accent)' : 'var(--text-muted)' }}>{ICONS[type]}</div>
-      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: selected ? 'var(--accent-contrast)' : 'var(--text-soft)' }}>
+      <div className="workload-card__icon">{ICONS[type]}</div>
+      <span className="workload-card__title">
         {type}
       </span>
-      <span style={{ fontSize: '0.71rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+      <span className="workload-card__description">
         {DESCRIPTIONS[type]}
       </span>
     </button>

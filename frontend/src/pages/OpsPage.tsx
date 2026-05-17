@@ -48,7 +48,6 @@ interface Props {
 const pageShell: React.CSSProperties = {
   maxWidth: '1720px',
   margin: '0 auto',
-  padding: '1.5rem',
 }
 
 const card: React.CSSProperties = {
@@ -738,7 +737,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
 
   if (!activeChartId) {
     return (
-      <div style={pageShell}>
+      <div className="page-shell" style={pageShell}>
         <div style={{ ...card, padding: '1.4rem' }}>
           <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: 'var(--text)' }}>
             Проверка и deploy
@@ -757,7 +756,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
   }
 
   return (
-    <div style={pageShell}>
+    <div className="page-shell" style={pageShell}>
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }
@@ -789,9 +788,9 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
       <div
         style={{
           ...card,
-          padding: '1.2rem 1.25rem',
-          marginBottom: '1.25rem',
-          background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface-base) 92%) 0%, var(--surface-base) 58%, color-mix(in srgb, var(--success) 5%, var(--surface-base) 95%) 100%)',
+          padding: '1rem 1.1rem',
+          marginBottom: '1rem',
+          background: 'var(--surface-base)',
         }}
       >
         <div style={{ display: 'grid', gap: '1rem' }}>
@@ -842,18 +841,18 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
 
           <div
             style={{
-              padding: '1rem',
+              padding: '0.9rem',
               borderRadius: '0.95rem',
               border: '1px solid var(--border-subtle)',
               background: 'var(--surface-elevated)',
               display: 'grid',
-              gap: '0.75rem',
+              gap: '0.65rem',
             }}
           >
             <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>
               {primaryFlowAction.title}
             </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.6 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.55 }}>
               {primaryFlowAction.description}
             </div>
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
@@ -883,9 +882,9 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '260px minmax(0, 1fr)', gap: '1.25rem', alignItems: 'start' }}>
+      <div className="ops-layout">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ ...card, padding: '1.15rem' }}>
+          <div style={{ ...card, padding: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
               <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)' }}>
                 Подключение к Kubernetes
@@ -955,7 +954,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             )}
           </div>
 
-          <div style={{ ...card, padding: '1.15rem' }}>
+          <div style={{ ...card, padding: '1rem' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: '0.35rem' }}>
               Параметры текущего шага
             </div>
@@ -1097,7 +1096,7 @@ export default function OpsPage({ activeChartId, active = true, onOpenGenerator 
             </div>
           </div>
 
-          <div style={{ ...card, padding: '1.15rem' }}>
+          <div style={{ ...card, padding: '1rem' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', marginBottom: '0.8rem' }}>
               Краткий прогресс
             </div>
